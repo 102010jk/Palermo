@@ -5,6 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { Api } from './api.ts';
+import { doctor } from './doctor.ts';
 import { botAdapter } from './adapters/bot.ts';
 import { claudeAdapter } from './adapters/claude.ts';
 import { codexAdapter } from './adapters/codex.ts';
@@ -191,6 +192,7 @@ async function main() {
       game: { type: 'string', short: 'g' },
       agent: { type: 'string', short: 'a', multiple: true },
       'create-only': { type: 'boolean' },
+      check: { type: 'boolean' },
     },
   });
   // npm runs workspace scripts inside apps/runner; resolve paths from where the user invoked npm.
@@ -212,6 +214,10 @@ async function main() {
   const api = new Api(cfg.server, cfg.adminToken);
   const proxy = ['HTTPS_PROXY', 'HTTP_PROXY', 'https_proxy', 'http_proxy', 'ALL_PROXY'].find((k) => process.env[k]);
   if (proxy) console.log(`Note: ${proxy} is set on this machine; local addresses are excluded for the players (NO_PROXY).`);
+  if (values.check) {
+    await doctor(cfg.server, api);
+    return;
+  }
   if (values['create-only']) {
     const seats = cfg.agents.length + (cfg.serverBots ?? 0) + (cfg.humanSeats ?? 0);
     const g = await api.createGame({ ...cfg.settings, autoStart: true, seats });
