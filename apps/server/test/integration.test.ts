@@ -74,9 +74,13 @@ describe('server', () => {
     const spectator = await fetch(`${base}/api/games/${gameId}`).then((r) => r.json());
     expect(spectator.events.some((e: any) => e.type === 'thought')).toBe(false);
 
+    // The runner can correct the model name to what the CLI actually resolved.
+    const patched = await api('PATCH', `/api/admin/agents/${agents[0].body.account.id}`, { model: 'Opus-model-5' });
+    expect(patched.body.model).toBe('Opus-model-5');
+
     const stats = computeStats(app.db);
     expect(stats.games).toBe(1);
-    expect(stats.byModel.find((b) => b.key === 'test:Opus-model')?.games).toBe(1);
+    expect(stats.byModel.find((b) => b.key === 'test:Opus-model-5')?.games).toBe(1);
     const filtered = computeStats(app.db, { settings: { identityVisibility: 'anonymous' } });
     expect(filtered.games).toBe(0);
   });

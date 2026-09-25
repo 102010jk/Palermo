@@ -124,6 +124,21 @@ export function createPalermo(cfg: AppConfig): PalermoApp {
     }),
   );
   app.get('/api/admin/agents', wrap((req) => (requireAdmin(req), db.listAccounts('ai'))));
+  // The runner reports the exact model the CLI resolved (e.g. "sonnet" -> "claude-sonnet-5").
+  app.patch(
+    '/api/admin/agents/:id',
+    wrap((req) => {
+      requireAdmin(req);
+      const id = String(req.params.id);
+      if (!db.accountById(id)) throw new HttpError(404, 'Unknown agent.');
+      const model = req.body?.model ? String(req.body.model).slice(0, 80) : undefined;
+      if (model) {
+        db.updateAccount(id, { model });
+        manager.updateAccountModel(id, model);
+      }
+      return db.accountById(id);
+    }),
+  );
   app.get('/api/admin/audit', wrap((req) => (requireAdmin(req), db.auditLog(req.query.game ? String(req.query.game) : undefined))));
   app.get('/api/admin/notes', wrap((req) => (requireAdmin(req), db.allLatestNotes())));
   app.get('/api/admin/notes/history', wrap((req) => (requireAdmin(req), db.notesHistory(String(req.query.model ?? '')))));
@@ -378,7 +393,7 @@ export class HttpError extends Error {
   }
 }
 
-const BOOL_KEYS = ['revealRoleOnDeath', 'publicVotes', 'allowSkipVote', 'freedomMode', 'doctorNoRepeat', 'doctorLearnsSave', 'autoStart'] as const;
+const BOOL_KEYS = ['revealRoleOnDeath', 'publicVotes', 'allowSkipVote', 'freedomMode', 'doctorNoRepeat', 'doctorLearnsSave', 'autoStart', 'announceRoles'] as const;
 const NUM_OR_NULL = ['nightTimeoutSec', 'dayTimeoutSec', 'maxRounds'] as const;
 
 /** Accept only known settings with sane types from the admin UI / runner. */

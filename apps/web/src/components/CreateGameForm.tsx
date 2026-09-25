@@ -14,6 +14,7 @@ export function CreateGameForm({ onCreated }: { onCreated: (id: string) => void 
     publicVotes: true,
     revealRoleOnDeath: true,
     allowSkipVote: true,
+    announceRoles: true,
     startPhase: 'night',
     nightTimeoutSec: '180',
     dayTimeoutSec: '',
@@ -40,6 +41,7 @@ export function CreateGameForm({ onCreated }: { onCreated: (id: string) => void 
         publicVotes: s.publicVotes,
         revealRoleOnDeath: s.revealRoleOnDeath,
         allowSkipVote: s.allowSkipVote,
+        announceRoles: s.announceRoles,
         startPhase: s.startPhase,
         nightTimeoutSec: s.nightTimeoutSec ? Number(s.nightTimeoutSec) : null,
         dayTimeoutSec: s.dayTimeoutSec ? Number(s.dayTimeoutSec) : null,
@@ -118,6 +120,7 @@ export function CreateGameForm({ onCreated }: { onCreated: (id: string) => void 
             ['publicVotes', 'Public votes'],
             ['revealRoleOnDeath', 'Reveal role on death'],
             ['allowSkipVote', 'Allow "skip" vote'],
+            ['announceRoles', 'Announce role counts at start'],
             ['freedomMode', 'No-rules mode (agents get full tools)'],
           ] as const
         ).map(([k, label]) => (

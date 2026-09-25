@@ -50,6 +50,15 @@ describe('lobby', () => {
   });
 });
 
+describe('start', () => {
+  it('can keep the role setup secret', () => {
+    const { g } = setup(['murderer', 'doctor', 'civilian', 'civilian'], { announceRoles: false });
+    const start = g.eventsFor('p0').find((e) => e.type === 'game_started')!;
+    expect(start.text).toContain('secret');
+    expect(start.data.roles).toBeUndefined();
+  });
+});
+
 describe('night', () => {
   it('murderer kills an unprotected target', () => {
     const { g, byRole } = setup(['murderer', 'doctor', 'tracker', 'civilian', 'civilian', 'civilian']);

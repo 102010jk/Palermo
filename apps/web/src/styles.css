@@ -651,6 +651,25 @@ button:focus-visible {
 .bubble.team {
   background: #ffe1dc;
 }
+.bubble.thought {
+  background: #efe8ff;
+  border-style: dashed;
+  font-style: italic;
+}
+.replay-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px;
+  border-top: 2px solid var(--line);
+  background: var(--card-2);
+}
+.replay-bar input[type='range'] {
+  flex: 1;
+  min-width: 120px;
+  accent-color: var(--gold);
+}
 @keyframes pop {
   from {
     transform: translateX(-50%) scale(0.8);

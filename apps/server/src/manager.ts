@@ -186,6 +186,17 @@ export class GameManager extends EventEmitter {
     });
   }
 
+  /** Correct the model of an account's seats in live games (stats read it from the seat). */
+  updateAccountModel(accountId: string, model: string): void {
+    for (const l of this.live.values()) {
+      const p = l.game.state.players.find((x) => x.accountId === accountId);
+      if (!p || p.model === model) continue;
+      p.model = model;
+      this.db.saveGame(l.game.state);
+      if (l.game.state.phase !== 'lobby') this.db.saveGamePlayers(l.game.state, {});
+    }
+  }
+
   addBot(gameId: string, name?: string): string {
     const l = this.mustLive(gameId);
     const n = name || `Bot-${l.game.state.players.filter((p) => p.kind === 'bot').length + 1}`;

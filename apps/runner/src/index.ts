@@ -114,6 +114,10 @@ async function playOneGame(cfg: RunnerConfig, api: Api, skill: string, gameNo: n
       freedomMode,
       skill,
       api,
+      reportModel: (model) => {
+        if (model === spec.model) return;
+        api.setAgentModel(agent.account.id, model).catch((e) => ctx.log(`model report failed: ${e.message}`));
+      },
       log: (line) => {
         const ts = new Date().toISOString().slice(11, 19);
         console.log(`\x1b[${color}m[${spec.name}]\x1b[0m ${line}`);

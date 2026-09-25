@@ -97,6 +97,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   dayTimeoutSec: null,
   maxRounds: 15,
   minPlayers: 3,
+  announceRoles: true,
   autoStart: false,
   seats: 0,
 };

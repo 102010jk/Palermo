@@ -5,6 +5,27 @@ import { runProcess, short, tryJson } from '../proc.ts';
 import type { Adapter, AgentContext, Launch, RunResult, Usage } from '../types.ts';
 
 /**
+ * If the runner itself is started from inside a Claude Code session (e.g. its terminal), these variables would
+ * make every player join that parent session. Players must be independent sessions.
+ */
+const PARENT_SESSION_ENV: Record<string, undefined> = Object.fromEntries(
+  [
+    'CLAUDECODE',
+    'CLAUDE_CODE_ENTRYPOINT',
+    'CLAUDE_CODE_SESSION_ID',
+    'CLAUDE_CODE_REMOTE_SESSION_ID',
+    'CLAUDE_CODE_CHILD_SESSION',
+    'CLAUDE_CODE_MESSAGING_SOCKET',
+    'CLAUDE_CODE_MESSAGING_TOKEN',
+    'CLAUDE_CODE_SYNC_SESSION_REFS',
+    'CLAUDE_CODE_TEE_SDK_STDOUT',
+    'CLAUDE_CODE_DIAGNOSTICS_FILE',
+    'CLAUDE_CODE_SESSION_ATTENDED',
+    'CLAUDE_PID',
+  ].map((k) => [k, undefined]),
+);
+
+/**
  * Claude Code in headless mode (`claude -p`), one long session per game.
  * Rules mode: built-in tools disabled, custom short system prompt (fewer tokens), only palermo MCP tools.
  * Freedom mode: default Claude Code prompt + all tools, permissions bypassed. Only run this inside a container.
@@ -40,7 +61,7 @@ export const claudeAdapter: Adapter = {
     let sid = sessionId;
     const code = await runProcess(ctx.spec.command ?? 'claude', args, {
       cwd: ctx.workdir,
-      env: { MCP_TOOL_TIMEOUT: '300000', MCP_TIMEOUT: '60000' },
+      env: { MCP_TOOL_TIMEOUT: '300000', MCP_TIMEOUT: '60000', ...PARENT_SESSION_ENV },
       onErr: (l) => ctx.log(`stderr: ${short(l)}`),
       onLine: (line) => {
         const m = tryJson(line);
@@ -49,6 +70,7 @@ export const claudeAdapter: Adapter = {
           sid = m.session_id ?? sid;
           const srv = (m.mcp_servers ?? []).find((s: any) => s.name === 'palermo');
           ctx.log(`session ${sid}, model ${m.model ?? '?'}, palermo MCP: ${srv?.status ?? 'missing'}`);
+          if (m.model) ctx.reportModel(String(m.model));
         } else if (m.type === 'assistant') {
           for (const c of m.message?.content ?? []) {
             if (c.type === 'text' && c.text?.trim()) ctx.log(`💬 ${short(c.text)}`);

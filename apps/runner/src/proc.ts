@@ -12,6 +12,8 @@ export function runProcess(
     const env: NodeJS.ProcessEnv = { ...process.env, ...opts.env };
     // Never leak the game master's secrets to a player.
     for (const k of SECRET_ENV) delete env[k];
+    // `undefined` in opts.env means "remove this variable".
+    for (const [k, v] of Object.entries(opts.env ?? {})) if (v === undefined) delete env[k];
     const child = spawn(cmd, args, { cwd: opts.cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
     const split = (fn: (l: string) => void) => {
       let buf = '';

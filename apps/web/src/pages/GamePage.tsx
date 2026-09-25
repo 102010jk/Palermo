@@ -23,6 +23,59 @@ function useNow(active: boolean) {
   return now;
 }
 
+type BubbleKind = 'chat' | 'team' | 'thought';
+type Bubble = { text: string; kind: BubbleKind; at: number };
+
+function bubbleFrom(e: GameEvent): Bubble | null {
+  if (!e.actor) return null;
+  if (e.type === 'chat') return { text: String(e.data.message ?? ''), kind: 'chat', at: e.at };
+  if (e.type === 'team_chat') return { text: String(e.data.message ?? ''), kind: 'team', at: e.at };
+  if (e.type === 'thought') return { text: String(e.data.thought ?? ''), kind: 'thought', at: e.at };
+  return null;
+}
+
+/** Rebuild what the town looked like after the first `events.length` events (for replays). */
+function deriveState(events: GameEvent[]) {
+  let phase = 'lobby';
+  let round = 0;
+  let winner: string | null = null;
+  const dead = new Set<string>();
+  let votes: Record<string, string> = {};
+  for (const e of events) {
+    if (e.type === 'phase_changed') {
+      phase = String(e.data.phase);
+      round = Number(e.data.round ?? round);
+      votes = {};
+    } else if (e.type === 'night_resolved' && e.data.victim) dead.add(String(e.data.victim));
+    else if (e.type === 'day_resolved') {
+      if (e.data.eliminated) dead.add(String(e.data.eliminated));
+      votes = {};
+    } else if (e.type === 'vote' && e.actor) {
+      if (e.data.target) votes[e.actor] = String(e.data.target);
+      else delete votes[e.actor];
+    } else if (e.type === 'game_ended') {
+      phase = 'ended';
+      winner = String(e.data.winner);
+    }
+  }
+  const last = events[events.length - 1];
+  const bubble = last ? bubbleFrom(last) : null;
+  return { phase, round, winner, dead, votes, bubble: bubble && last?.actor ? { [last.actor]: bubble } : {} };
+}
+
+/** How long a replay lingers on an event, at 1x speed. */
+function replayDelay(e: GameEvent | undefined, admin: boolean): number {
+  if (!e) return 0;
+  if (e.type === 'notice' && e.vis.scope === 'admin') return 0;
+  if (['player_joined', 'player_ready', 'player_left'].includes(e.type)) return 120;
+  if (e.type === 'role_assigned') return admin ? 400 : 1500;
+  const b = bubbleFrom(e);
+  if (b) return 1200 + Math.min(5000, b.text.length * 28);
+  if (e.type === 'phase_changed') return 1800;
+  if (['night_resolved', 'day_resolved', 'game_ended'].includes(e.type)) return 3000;
+  return 700;
+}
+
 function fmtTime(ms: number) {
   const s = Math.max(0, Math.round(ms / 1000));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
@@ -34,7 +87,8 @@ export function GamePage({ gameId }: { gameId: string }) {
   const [events, setEvents] = useState<GameEvent[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [godView, setGodView] = useState(true);
-  const [bubbles, setBubbles] = useState<Record<string, { text: string; team: boolean; at: number }>>({});
+  const [bubbles, setBubbles] = useState<Record<string, Bubble>>({});
+  const [replay, setReplay] = useState<{ idx: number; playing: boolean; speed: number } | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [missing, setMissing] = useState(false);
@@ -61,9 +115,9 @@ export function GamePage({ gameId }: { gameId: string }) {
       setBubbles((b) => {
         const next = { ...b };
         for (const e of p.events) {
-          if ((e.type === 'chat' || e.type === 'team_chat') && e.actor) {
-            next[e.actor] = { text: String(e.data.message ?? ''), team: e.type === 'team_chat', at: now };
-          }
+          const bubble = bubbleFrom(e);
+          // Thoughts only show up in god view (they are only sent to admins anyway).
+          if (bubble && e.actor) next[e.actor] = { ...bubble, at: now };
         }
         return next;
       });
@@ -102,21 +156,46 @@ export function GamePage({ gameId }: { gameId: string }) {
     return () => clearInterval(t);
   }, []);
 
+  // Replay: advance one event at a time.
+  useEffect(() => {
+    if (!replay?.playing) return;
+    if (replay.idx >= events.length) {
+      setReplay((r) => r && { ...r, playing: false });
+      return;
+    }
+    const delay = replayDelay(events[replay.idx - 1], admin) / replay.speed;
+    const t = setTimeout(() => setReplay((r) => r && { ...r, idx: Math.min(events.length, r.idx + 1) }), delay);
+    return () => clearTimeout(t);
+  }, [replay, events, admin]);
+
   // Keep the log scrolled to the bottom unless the user scrolled up.
   useEffect(() => {
     const el = logRef.current;
-    if (el && stick.current) el.scrollTop = el.scrollHeight;
-  }, [events]);
+    if (el && (stick.current || replay)) el.scrollTop = el.scrollHeight;
+  }, [events, replay?.idx]);
 
   const now = useNow(!!view?.phaseEndsAt);
-  const phase = view?.phase ?? 'lobby';
+  const shownEvents = replay ? events.slice(0, replay.idx) : events;
+  const replayState = useMemo(() => (replay ? deriveState(shownEvents) : null), [replay?.idx, events]);
+  const phase = replayState?.phase ?? view?.phase ?? 'lobby';
+  const round = replayState?.round ?? view?.round ?? 0;
+  const winner = replayState ? replayState.winner : view?.winner;
   const night = phase === 'night';
+  const shownBubbles = replayState?.bubble ?? bubbles;
 
   const voteCounts = useMemo(() => {
     const c: Record<string, number> = {};
+    if (replayState) {
+      const nameOf = new Map((view?.players ?? []).map((p) => [p.id, p.name]));
+      for (const t of Object.values(replayState.votes)) {
+        const n = t === 'skip' ? 'skip' : nameOf.get(t) ?? t;
+        c[n] = (c[n] ?? 0) + 1;
+      }
+      return c;
+    }
     for (const t of Object.values(view?.votes ?? {})) c[t] = (c[t] ?? 0) + 1;
     return c;
-  }, [view?.votes]);
+  }, [view?.votes, view?.players, replayState]);
 
   if (missing && !view) return <div className="card">Game not found.</div>;
   if (!view) return <div className="loading">Loading town…</div>;
@@ -142,9 +221,12 @@ export function GamePage({ gameId }: { gameId: string }) {
 
   const options = req.options ?? [];
   const canTarget = (p: PublicPlayer) => !!me && options.includes(p.name);
-  const title = phase === 'lobby' ? 'Lobby' : phase === 'ended' ? 'Game over' : `${night ? 'Night' : 'Day'} ${view.round}`;
-  const timeLeft = view.phaseEndsAt ? fmtTime(view.phaseEndsAt - now) : null;
-  const canChat = phase === 'lobby' || (me?.alive && (phase === 'day' || (night && me.role === 'murderer')));
+  const title = phase === 'lobby' ? 'Lobby' : phase === 'ended' ? 'Game over' : `${night ? 'Night' : 'Day'} ${round}`;
+  const timeLeft = !replay && view.phaseEndsAt ? fmtTime(view.phaseEndsAt - now) : null;
+  const isAlive = (p: PublicPlayer) => (replayState ? !replayState.dead.has(p.id) : p.alive);
+  const startedAt = events.find((e) => e.type === 'game_started')?.at ?? events[0]?.at ?? 0;
+  const replayClock = replay && shownEvents.length ? fmtTime((shownEvents[shownEvents.length - 1].at ?? startedAt) - startedAt) : null;
+  const canChat = !replay && (view.phase === 'lobby' || (me?.alive && (view.phase === 'day' || (view.phase === 'night' && me.role === 'murderer'))));
   const joined = !!me;
 
   return (
@@ -157,14 +239,15 @@ export function GamePage({ gameId }: { gameId: string }) {
         <div className="banner">
           <span className="phase-title">{title}</span>
           {timeLeft && <span className="timer">{timeLeft}</span>}
-          {phase === 'day' && (
+          {phase === 'day' && !replay && (
             <span className="votes-progress">
               votes {view.votedCount}/{view.aliveCount}
             </span>
           )}
-          {view.winner && (
-            <span className={`winner ${view.winner}`}>
-              {view.winner === 'mafia' ? 'Murderers win' : view.winner === 'town' ? 'Town wins' : 'Draw'}
+          {replayClock && <span className="timer">replay +{replayClock}</span>}
+          {winner && (
+            <span className={`winner ${winner}`}>
+              {winner === 'mafia' ? 'Murderers win' : winner === 'town' ? 'Town wins' : 'Draw'}
             </span>
           )}
           {isAdmin && (
@@ -176,21 +259,27 @@ export function GamePage({ gameId }: { gameId: string }) {
         <div className="town-row">
           {view.players.map((p, i) => {
             const look = lookFor(p);
-            const bubble = bubbles[p.id];
+            const bubble = shownBubbles[p.id];
+            const alive = isAlive(p);
             const votes = voteCounts[p.name] ?? 0;
             const target = canTarget(p) && !!me?.alive;
             return (
               <button
                 key={p.id}
-                className={`seat ${p.alive ? '' : 'dead'} ${p.id === me?.id ? 'me' : ''} ${selected === p.name ? 'selected' : ''} ${target ? 'targetable' : ''}`}
+                className={`seat ${alive ? '' : 'dead'} ${p.id === me?.id ? 'me' : ''} ${selected === p.name ? 'selected' : ''} ${target ? 'targetable' : ''}`}
                 onClick={() => target && setSelected(p.name)}
                 disabled={!target}
                 title={p.realName ? `${p.realName}` : undefined}
               >
-                {bubble && <span className={`bubble ${bubble.team ? 'team' : ''}`}>{bubble.text.length > 90 ? `${bubble.text.slice(0, 90)}…` : bubble.text}</span>}
+                {bubble && (
+                  <span className={`bubble ${bubble.kind}`}>
+                    {bubble.kind === 'thought' && '💭 '}
+                    {bubble.text.length > 110 ? `${bubble.text.slice(0, 110)}…` : bubble.text}
+                  </span>
+                )}
                 {votes > 0 && <span className="vote-badge">{votes}</span>}
                 <House night={night} roof={ROOFS[i % ROOFS.length]} scale={4} />
-                <span className="figure">{p.alive ? <Character look={look} scale={4} className={bubble ? 'talk' : 'bob'} style={{ animationDelay: `${(i % 5) * 0.2}s` }} /> : <Grave scale={4} />}</span>
+                <span className="figure">{alive ? <Character look={look} scale={4} className={bubble ? 'talk' : 'bob'} style={{ animationDelay: `${(i % 5) * 0.2}s` }} /> : <Grave scale={4} />}</span>
                 <span className="nametag" style={{ borderColor: LOOKS[look].color }}>
                   {p.name}
                 </span>
@@ -217,10 +306,48 @@ export function GamePage({ gameId }: { gameId: string }) {
               stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
             }}
           >
-            {events.map((e) => (
+            {shownEvents.map((e) => (
               <EventLine key={e.seq} e={e} players={view.players} admin={view.isAdmin} />
             ))}
           </div>
+          {view.phase === 'ended' && events.length > 0 && (
+            <div className="replay-bar">
+              {!replay ? (
+                <button className="primary" onClick={() => setReplay({ idx: 0, playing: true, speed: 1 })}>
+                  ▶ Replay game
+                </button>
+              ) : (
+                <>
+                  <button onClick={() => setReplay((r) => r && { ...r, idx: Math.max(0, r.idx - 1), playing: false })} title="Step back">
+                    ◀
+                  </button>
+                  <button className="primary" onClick={() => setReplay((r) => r && { ...r, playing: !r.playing, idx: r.idx >= events.length ? 0 : r.idx })}>
+                    {replay.playing ? '❚❚ Pause' : '▶ Play'}
+                  </button>
+                  <button onClick={() => setReplay((r) => r && { ...r, idx: Math.min(events.length, r.idx + 1), playing: false })} title="Step forward">
+                    ▶
+                  </button>
+                  <input
+                    type="range"
+                    min={0}
+                    max={events.length}
+                    value={replay.idx}
+                    onChange={(e) => setReplay((r) => r && { ...r, idx: Number(e.target.value), playing: false })}
+                    aria-label="Replay position"
+                  />
+                  <select value={replay.speed} onChange={(e) => setReplay((r) => r && { ...r, speed: Number(e.target.value) })} aria-label="Replay speed">
+                    <option value={0.5}>0.5×</option>
+                    <option value={1}>1×</option>
+                    <option value={2}>2×</option>
+                    <option value={4}>4×</option>
+                  </select>
+                  <button className="ghost" onClick={() => setReplay(null)}>
+                    Exit
+                  </button>
+                </>
+              )}
+            </div>
+          )}
           {joined && canChat && (
             <form
               className="chat-input"
@@ -255,7 +382,7 @@ export function GamePage({ gameId }: { gameId: string }) {
             </section>
           )}
 
-          {me && phase === 'lobby' && (
+          {me && view.phase === 'lobby' && (
             <section className="card">
               <button className="primary" onClick={() => act('ready', { ready: !view.players.find((p) => p.id === me.id)?.ready })}>
                 {view.players.find((p) => p.id === me.id)?.ready ? 'Not ready' : "I'm ready"}
@@ -266,7 +393,7 @@ export function GamePage({ gameId }: { gameId: string }) {
             </section>
           )}
 
-          {!me && phase === 'lobby' && account && (
+          {!me && view.phase === 'lobby' && account && (
             <section className="card">
               <button className="primary" onClick={() => act('join', {})}>
                 Join this game
@@ -312,15 +439,15 @@ export function GamePage({ gameId }: { gameId: string }) {
             <section className="card admin-controls">
               <h3>Game master</h3>
               <div className="row wrap">
-                {phase === 'lobby' && (
+                {view.phase === 'lobby' && (
                   <>
                     <button onClick={() => adminAct('start', { force: false })}>Start</button>
                     <button onClick={() => adminAct('start', { force: true })}>Force start</button>
                     <button onClick={() => adminAct('bots', { count: 1 })}>+ Bot</button>
                   </>
                 )}
-                {(phase === 'night' || phase === 'day') && <button onClick={() => adminAct('advance')}>End {phase} now</button>}
-                {phase !== 'ended' && (
+                {(view.phase === 'night' || view.phase === 'day') && <button onClick={() => adminAct('advance')}>End {view.phase} now</button>}
+                {view.phase !== 'ended' && (
                   <button className="danger" onClick={() => confirm('Stop this game?') && adminAct('abort')}>
                     Stop game
                   </button>

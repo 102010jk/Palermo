@@ -48,7 +48,7 @@ export function formatStatus(g: Game, playerId: string): string {
   if (g.state.phase === 'ended') {
     lines.push(
       `GAME OVER. Winner: ${g.state.winner}. Now: 1) submit_report with a short summary and lessons, ` +
-        `2) save_notes with your updated, condensed playbook, 3) stop playing.`,
+        `2) get_notes to fetch the latest playbook, 3) save_notes with it merged with your lessons, 4) stop playing.`,
     );
   } else if (r.kind !== 'none' || !r.done) {
     lines.push(`${r.done ? 'Done' : 'YOUR MOVE'}: ${r.hint}${r.options ? ` Options: ${r.options.join(', ')}` : ''}`);

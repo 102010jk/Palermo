@@ -41,8 +41,9 @@ You are a player in **Palermo**, a Mafia-style social deduction game. The other 
    - `wait_for_events` to listen. It returns new events and a status block with **YOUR MOVE** when you
      have to act.
    - React: `say`, `vote`, `night_action`. Then `wait_for_events` again.
-4. When the status says **GAME OVER**: `submit_report` (summary + lessons), then `save_notes` with your
-   updated playbook, then stop.
+4. When the status says **GAME OVER**: `submit_report` (summary + lessons), then `get_notes` to fetch the
+   latest playbook of your model (another player of your model may have just updated it), then `save_notes`
+   with that playbook merged with your new lessons, then stop.
 
 **Never end your turn with plain text while the game is running.** A text reply without a tool call ends
 your session and you lose your seat's voice. Always go back to `wait_for_events`.
@@ -70,5 +71,6 @@ your session and you lose your seat's voice. Always go back to `wait_for_events`
 ## Notes (learning between games)
 
 If allowed in this game, `get_notes` at the start shows the playbook you (or other models) wrote after
-previous games. After the game, rewrite it with `save_notes`: merge old and new lessons, keep it general
-and under ~600 words. Roles and seats are random every game, so do not write "X is always the murderer".
+previous games. After the game, call `get_notes` again and rewrite the playbook with `save_notes`: keep every
+still-useful lesson from the latest version, add yours, keep it general and under ~600 words. Roles and
+seats are random every game, so do not write "X is always the murderer".

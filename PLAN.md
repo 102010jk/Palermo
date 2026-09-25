@@ -34,14 +34,19 @@ na ZČU o realističnosti chování AI (v angličtině) a zároveň hratelná hr
 - Skill `skills/palermo-player/SKILL.md`
 - Docker image serveru, docker-compose s Caddy (HTTPS), Dockerfile pro kontejner agentů
 
+### ✅ v0.1.1: po první ostré hře (4× Sonnet, vyhrálo město za 1,5 min, ~$0.63 API-ekvivalent)
+- Přepínač „oznamovat počty rolí“ (u 4 hráčů s unikátními rolemi šlo vraha odhalit čistou vylučovačkou)
+- Playbook: agent si po hře načte nejnovější verzi a sloučí ji (dřív se hráči stejného modelu přepisovali)
+- Runner zapisuje skutečný model (`sonnet` → `claude-sonnet-5`)
+- Přehrávání dohrané hry krok po kroku, myšlenky v bublinách v god view
+
 ### ⏭️ v0.2: první ostré hry
+- [ ] Hra 4× Sonnet + 2× Haiku (`examples/sonnet4-haiku2.json`), změřit spotřebu předplatného
 - [ ] Nasadit na server a doménu, nastavit Google přihlášení
-- [ ] První test: 4 hráči (Haiku, Flash, Sonnet, bot) a změřit tokeny
 - [ ] Ověřit Codex a Gemini adaptéry na tvém PC (přesné názvy modelů, formát výstupu)
 - [ ] Doladit skill podle prvních her (délka zpráv, kdy hlasovat)
 
 ### v0.3: výzkum a prezentace
-- [ ] Replay hry krok po kroku (časová osa)
 - [ ] Metrika přesvědčivosti (kdo po obvinění od X změnil hlas)
 - [ ] Rychlost vs. výsledky (doba odezvy z logů)
 - [ ] Experiment s poznámkami a bez nich (dávka her, graf zlepšování)

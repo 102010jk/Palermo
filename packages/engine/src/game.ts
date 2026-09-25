@@ -239,8 +239,10 @@ export class Game {
         'game_started',
         { scope: 'public' },
         `The game begins with ${s.players.length} players: ${s.players.map((p) => p.publicName).join(', ')}. ` +
-          `Roles in play: ${summarizeRoles(roles)}.`,
-        { players: s.players.map((p) => p.publicName), roles: countRoles(roles) },
+          (this.settings.announceRoles
+            ? `Roles in play: ${summarizeRoles(roles)}.`
+            : 'The role setup is secret: nobody knows how many of each role are in play.'),
+        { players: s.players.map((p) => p.publicName), roles: this.settings.announceRoles ? countRoles(roles) : undefined },
       ),
     );
 

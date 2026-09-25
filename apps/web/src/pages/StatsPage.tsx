@@ -44,6 +44,7 @@ const FILTERS: { key: string; label: string }[] = [
   { key: 'startPhase', label: 'Starts with' },
   { key: 'revealRoleOnDeath', label: 'Role reveal' },
   { key: 'publicVotes', label: 'Public votes' },
+  { key: 'announceRoles', label: 'Roles announced' },
 ];
 
 const pct = (x: number | null | undefined) => (x == null ? '–' : `${Math.round(x * 100)}%`);

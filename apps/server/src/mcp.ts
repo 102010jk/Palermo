@@ -29,6 +29,13 @@ function fail(t: string) {
   return { content: [{ type: 'text' as const, text: `ERROR: ${t}` }], isError: true };
 }
 
+/** "sonnet" vs "claude-sonnet-5": aliases count as the same model. */
+function sameModel(a: string, b: string): boolean {
+  const x = a.toLowerCase();
+  const y = b.toLowerCase();
+  return x === y || x.includes(y) || y.includes(x);
+}
+
 export function modelKey(a: { provider: string | null; model: string | null; name: string }): string {
   return a.model ? `${a.provider ?? 'unknown'}:${a.model}` : `agent:${a.name}`;
 }
@@ -81,7 +88,7 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
           name: args.display_name ?? account.name,
         });
         Object.assign(account, db.accountById(account.id));
-      } else if (args.model && account.model && args.model !== account.model) {
+      } else if (args.model && account.model && !sameModel(args.model, account.model)) {
         db.audit(null, account.id, 'model_mismatch', `claimed ${args.model}, verified as ${account.model}`);
       }
       loggedIn.add(account.id);
@@ -247,10 +254,22 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
 
   server.registerTool(
     'get_notes',
-    { description: 'Read the notes / playbook written after previous games (if this game allows it).', inputSchema: {} },
+    {
+      description:
+        'Read the playbook written after previous games (during a game only if the game allows it). ' +
+        'After the game it always returns the latest version of your own playbook, so you can merge before save_notes.',
+      inputSchema: {},
+    },
     guard(async () => {
       const current = manager.currentGameFor(account.id);
+      const over = !current || current.state.phase === 'ended';
       const mode = current?.settings.notesMode ?? 'own';
+      const own = () => {
+        const n = db.latestNotes(modelKey(account));
+        return n ? n.content : 'No notes yet.';
+      };
+      // After the game nothing can leak into play; always show the latest own playbook so merges don't lose lessons.
+      if (over) return text(`Latest playbook for ${modelKey(account)} (other players of your model may have updated it):\n\n${own()}`);
       if (mode === 'none') return text('Notes are disabled for this game. Rely on your own judgement.');
       if (mode === 'shared') {
         const all = db.allLatestNotes();
@@ -266,7 +285,8 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
     'save_notes',
     {
       description:
-        'Replace your playbook with an updated version (after a game). Merge old lessons with new ones and keep it ' +
+        'Replace your playbook with an updated version (after a game). First call get_notes to fetch the LATEST version ' +
+        '(other players of your model may have saved theirs meanwhile), then merge old lessons with yours and keep it ' +
         'short and general (max ~600 words). Do not store facts about specific seat assignments, roles are random.',
       inputSchema: { content: z.string().min(1).max(8000) },
     },

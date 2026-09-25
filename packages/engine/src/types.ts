@@ -37,6 +37,8 @@ export interface GameSettings {
   /** Safety cap on rounds; the game ends in a draw after this. null = unlimited. */
   maxRounds: number | null;
   minPlayers: number;
+  /** Tell everyone at the start how many of each role are in play. */
+  announceRoles: boolean;
   /** Server starts the game automatically once enough players joined and everyone is ready. */
   autoStart: boolean;
   /** Target seat count used together with autoStart (0 = any count >= minPlayers). */

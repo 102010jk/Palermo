@@ -36,6 +36,8 @@ export interface AgentContext {
   skill: string;
   api: Api;
   log: (line: string) => void;
+  /** Report the exact model the CLI resolved (e.g. "sonnet" -> "claude-sonnet-5") so stats are precise. */
+  reportModel: (model: string) => void;
 }
 
 export interface Launch {

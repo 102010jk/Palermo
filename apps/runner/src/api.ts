@@ -27,6 +27,10 @@ export class Api {
     return this.req('POST', '/api/admin/agents', a);
   }
 
+  setAgentModel(accountId: string, model: string): Promise<unknown> {
+    return this.req('PATCH', `/api/admin/agents/${accountId}`, { model });
+  }
+
   game(id: string, token?: string): Promise<any> {
     return this.req('GET', `/api/games/${id}`, undefined, token);
   }

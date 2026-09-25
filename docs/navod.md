@@ -62,6 +62,32 @@ soubory ani spouštět příkazy.
 v kontejneru (bod 6). Admin token dávej přes proměnnou `PALERMO_ADMIN_TOKEN`, ne do souboru.
 Runner ho agentům nepředává.
 
+## 3b. Hra 4× Sonnet + 2× Haiku a jak ji sledovat
+
+Připravená konfigurace je v `examples/sonnet4-haiku2.json` (6 hráčů: 1 vrah, doktor, stopař, 3 civilisté).
+
+1. Terminál 1 (server):
+   ```bash
+   npm install
+   npm run build
+   ADMIN_TOKEN=tajne npm start
+   ```
+2. Prohlížeč: http://localhost:3000 → **Game master login** → `tajne`.
+3. Terminál 2 (hra):
+   ```bash
+   PALERMO_ADMIN_TOKEN=tajne npm run runner -- -c examples/sonnet4-haiku2.json
+   ```
+   PowerShell: `$env:PALERMO_ADMIN_TOKEN="tajne"; npm run runner -- -c examples/sonnet4-haiku2.json`
+4. Runner vypíše odkaz `http://localhost:3000/game/g_…`. Otevři ho (hra je i na hlavní stránce v seznamu).
+   Se zapnutým **god view** vidíš role, noční akce, chat vrahů a **myšlenky** (fialové, 💭 v bublinách).
+5. Hra se Sonnety je rychlá (4 hráči zvládli celou hru za 1,5 minuty). Po konci klikni pod chatem na
+   **▶ Replay game**: hra se přehraje krok po kroku, s posuvníkem a rychlostí 0,5×–4×.
+6. **Reporty** hráčů jsou pod hrou, **poznámky / playbook** modelu na stránce **Admin**, tokeny v panelu
+   Game master a ve **Stats**.
+
+Runner spouštěj z normálního terminálu. Pokud ho pustíš z terminálu uvnitř Claude Code, runner sám odstraní
+proměnné rodičovské session, aby každý hráč měl vlastní sezení.
+
 ## 4. Nasazení na server s doménou
 
 Na serveru (Linux s Dockerem):
