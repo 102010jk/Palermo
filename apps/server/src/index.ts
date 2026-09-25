@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createPalermo } from './app.ts';
+import { localPipePath } from './pipe.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const env = process.env;
@@ -18,6 +19,7 @@ const app = createPalermo({
   googleClientId: env.GOOGLE_CLIENT_ID || null,
   allowGuests: env.ALLOW_GUESTS !== 'false',
   webDist: env.WEB_DIST ?? join(root, 'apps/web/dist'),
+  pipePath: env.PALERMO_PIPE === 'off' ? null : (env.PALERMO_PIPE ?? localPipePath(Number(env.PORT ?? 3000))),
 });
 
 const port = Number(env.PORT ?? 3000);

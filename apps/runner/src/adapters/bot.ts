@@ -3,6 +3,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { localPipeFor } from '../pipe.ts';
 import type { Adapter, AgentContext, Launch, RunResult } from '../types.ts';
 
 const BRIDGE = join(dirname(fileURLToPath(import.meta.url)), '..', 'mcp-bridge.mjs');
@@ -26,7 +27,12 @@ export async function playBotOverMcp(opts: {
   const rand = opts.rand ?? Math.random;
   const client = new Client({ name: 'palermo-bot', version: '0.1.0' });
   const transport = opts.viaBridge
-    ? new StdioClientTransport({ command: process.execPath, args: [BRIDGE, opts.mcpUrl], env: { PALERMO_TOKEN: opts.token }, stderr: 'ignore' })
+    ? new StdioClientTransport({
+        command: process.execPath,
+        args: [BRIDGE, opts.mcpUrl],
+        env: { PALERMO_TOKEN: opts.token, ...(localPipeFor(opts.mcpUrl) ? { PALERMO_SOCKET: localPipeFor(opts.mcpUrl)! } : {}) },
+        stderr: 'ignore',
+      })
     : new StreamableHTTPClientTransport(new URL(opts.mcpUrl), {
         requestInit: { headers: { Authorization: `Bearer ${opts.token}` } },
       });

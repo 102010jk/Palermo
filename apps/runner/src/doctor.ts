@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { Api } from './api.ts';
+import { localPipeFor } from './pipe.ts';
 
 /**
  * Connection check without any model: every step prints OK or the exact failure.
@@ -94,11 +95,21 @@ export async function doctor(server: string, api: Api): Promise<void> {
     return (r.content[0]?.text ?? '').split('\n')[0];
   });
 
-  await bridgeStep('6. stdio bridge (how Claude Code connects): initialize + tools/list', mcpUrl, token, process.env, false);
+  await bridgeStep('6. stdio bridge over TCP: initialize + tools/list', mcpUrl, token, process.env, false);
+  const pipe = localPipeFor(mcpUrl);
+  if (pipe) {
+    await bridgeStep(`6b. stdio bridge over the local pipe ${pipe}`, mcpUrl, token, { ...process.env, PALERMO_SOCKET: pipe }, false);
+  }
   // Claude Code starts MCP servers with a reduced environment; mimic that and hold a long-poll open.
   const game = await api.createGame({ mode: 'doctor' }).catch(() => null);
   if (game) {
-    await bridgeStep('7. bridge with minimal environment + a 3 s wait_for_events', mcpUrl, token, minimalEnv(), game.id);
+    await bridgeStep(
+      '7. bridge as Claude Code starts it (minimal environment, pipe) + a 3 s wait_for_events',
+      mcpUrl,
+      token,
+      { ...minimalEnv(), ...(pipe ? { PALERMO_SOCKET: pipe } : {}) },
+      game.id,
+    );
     await api.req('POST', `/api/games/${game.id}/abort`, {}).catch(() => {});
   }
 
@@ -159,7 +170,8 @@ async function bridgeStep(name: string, mcpUrl: string, token: string, baseEnv: 
       send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
       const list = await waitFor(2);
       if (list.error) throw new Error(`tools/list error: ${JSON.stringify(list.error)}`);
-      if (!longPollGame) return `${list.result.tools.length} tools`;
+      const via = () => (existsSync(logFile) && readFileSync(logFile, 'utf8').includes('[pipe]') ? 'local pipe' : 'TCP');
+      if (!longPollGame) return `${list.result.tools.length} tools via ${via()}`;
       const call = async (id: number, name: string, args: Record<string, unknown>) => {
         send({ jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args } });
         const r = await waitFor(id, 20000);
@@ -170,7 +182,7 @@ async function bridgeStep(name: string, mcpUrl: string, token: string, baseEnv: 
       await call(5, 'join_game', { game_id: longPollGame });
       const t = Date.now();
       const waited = await call(4, 'wait_for_events', { max_wait_seconds: 3 });
-      return `long-poll returned after ${Date.now() - t} ms: ${waited.split('\n')[0].slice(0, 80)}`;
+      return `long-poll via ${via()} returned after ${Date.now() - t} ms: ${waited.split('\n')[0].slice(0, 80)}`;
     } catch (e) {
       const log = existsSync(logFile) ? readFileSync(logFile, 'utf8').trim() : '(no bridge log)';
       throw new Error(`${describe(e)}\n      bridge log:\n      ${log.split(/\r?\n/).join('\n      ')}`);

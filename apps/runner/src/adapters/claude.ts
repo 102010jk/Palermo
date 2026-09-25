@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { localPipeFor } from '../pipe.ts';
 import { runProcess, short, tryJson } from '../proc.ts';
 import type { Adapter, AgentContext, Launch, RunResult, Usage } from '../types.ts';
 
@@ -64,7 +65,11 @@ export const claudeAdapter: Adapter = {
                     type: 'stdio',
                     command: process.execPath,
                     args: [BRIDGE, ctx.mcpUrl],
-                    env: { PALERMO_TOKEN: ctx.token, PALERMO_BRIDGE_LOG: join(ctx.workdir, 'bridge.log') },
+                    env: {
+                      PALERMO_TOKEN: ctx.token,
+                      PALERMO_BRIDGE_LOG: join(ctx.workdir, 'bridge.log'),
+                      ...(localPipeFor(ctx.mcpUrl) ? { PALERMO_SOCKET: localPipeFor(ctx.mcpUrl) } : {}),
+                    },
                   },
           },
         },

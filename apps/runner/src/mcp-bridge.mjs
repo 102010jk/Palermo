@@ -37,9 +37,22 @@ log(
 );
 
 const NULL_BODY = new Set([101, 204, 205, 304]);
+// Local IPC path of the game server (named pipe on Windows). Preferred when present; TCP is the fallback.
+let socketPath = process.env.PALERMO_SOCKET || null;
+if (socketPath) log(`using local pipe ${socketPath} (TCP fallback: ${url})`);
 
 /** Minimal fetch() on top of node:http. Supports what the MCP client transport needs, incl. streamed SSE bodies. */
 function httpFetch(input, init = {}) {
+  if (!socketPath) return httpFetchOnce(input, init, null);
+  return httpFetchOnce(input, init, socketPath).catch((e) => {
+    if (!['ENOENT', 'ECONNREFUSED', 'EACCES', 'EPERM'].includes(e?.code)) throw e;
+    log(`local pipe unavailable (${e.code}); switching to TCP ${url}`);
+    socketPath = null;
+    return httpFetchOnce(input, init, null);
+  });
+}
+
+function httpFetchOnce(input, init, viaSocket) {
   const target = new URL(typeof input === 'string' || input instanceof URL ? input : input.url);
   const lib = target.protocol === 'https:' ? https : http;
   const headers = {};
@@ -50,9 +63,12 @@ function httpFetch(input, init = {}) {
   const method = init.method ?? 'GET';
   const started = Date.now();
   return new Promise((resolve, reject) => {
-    const req = lib.request(target, { method, headers, agent: false }, (res) => {
+    const options = viaSocket
+      ? { socketPath: viaSocket, path: `${target.pathname}${target.search}`, method, headers: { ...headers, host: target.host }, agent: false }
+      : { method, headers, agent: false };
+    const onResponse = (res) => {
       const status = res.statusCode ?? 0;
-      log(`${method} ${target.pathname} -> ${status} ${res.headers['content-type'] ?? ''} (${Date.now() - started} ms)`);
+      log(`${method} ${target.pathname} ${viaSocket ? '[pipe]' : '[tcp]'} -> ${status} ${res.headers['content-type'] ?? ''} (${Date.now() - started} ms)`);
       const h = new Headers();
       for (const [k, v] of Object.entries(res.headers)) {
         if (v === undefined) continue;
@@ -64,7 +80,8 @@ function httpFetch(input, init = {}) {
       } else {
         resolve(new Response(Readable.toWeb(res), { status, headers: h }));
       }
-    });
+    };
+    const req = viaSocket ? http.request(options, onResponse) : lib.request(target, options, onResponse);
     req.on('error', (e) => {
       log(`${method} ${target.pathname} failed after ${Date.now() - started} ms: ${describe(e)}`);
       reject(e);

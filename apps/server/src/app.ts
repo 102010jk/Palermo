@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import { createServer, type Server as HttpServer } from 'node:http';
 import { join } from 'node:path';
 import express, { type NextFunction, type Request, type Response } from 'express';
@@ -17,6 +17,8 @@ export interface AppConfig {
   allowGuests: boolean;
   webDist: string | null;
   manager?: ManagerOptions;
+  /** Also serve the API/MCP on this local IPC path (Windows named pipe or Unix socket). */
+  pipePath?: string | null;
 }
 
 export interface PalermoApp {
@@ -309,6 +311,15 @@ export function createPalermo(cfg: AppConfig): PalermoApp {
 
   // ------------------------------------------------------------------ realtime (web UI)
   const http = createServer(app);
+  // Local IPC endpoint for the agents' MCP bridge: invisible to proxies and HTTP-scanning security software.
+  let pipe: HttpServer | null = null;
+  if (cfg.pipePath) {
+    if (process.platform !== 'win32') rmSync(cfg.pipePath, { force: true });
+    pipe = createServer(app);
+    pipe.requestTimeout = 0;
+    pipe.on('error', (e) => console.warn(`[server] local pipe ${cfg.pipePath} unavailable: ${e.message}`));
+    pipe.listen(cfg.pipePath);
+  }
   // Long-polling MCP tool calls can take a while.
   http.requestTimeout = 0;
   http.headersTimeout = 130_000;
@@ -385,6 +396,7 @@ export function createPalermo(cfg: AppConfig): PalermoApp {
       manager.close();
       io.close();
       await new Promise<void>((r) => http.close(() => r()));
+      if (pipe) await new Promise<void>((r) => pipe!.close(() => r()));
       db.sql.close();
     },
   };
