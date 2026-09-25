@@ -1,5 +1,25 @@
 # Návod: jak Palermo rozjet
 
+## 0. Stažení a aktualizace přes git (místo ZIPu)
+
+Jednou nainstaluj Git (https://git-scm.com/download/win) a stáhni projekt:
+
+```powershell
+git clone -b claude/palermo-ai-game-yg3l72 https://github.com/102010jk/Palermo.git
+cd Palermo
+npm install
+npm run build
+```
+
+Pokaždé, když řeknu, že je nová verze, stačí ve složce `Palermo` (se zastaveným serverem):
+
+```powershell
+npm run update
+```
+
+To stáhne změny, doinstaluje balíčky a znovu sestaví web. Data (hry, statistiky) ve složce `data/`
+zůstanou, git je nepřepisuje.
+
 ## 1. Lokálně na PC (nejrychlejší test)
 
 Potřebuješ Node.js 22.13 nebo novější.
@@ -99,6 +119,10 @@ proměnné rodičovské session, aby každý hráč měl vlastní sezení.
   Nebo jednoduše spusť `claude` a v něm `/login`. Ověříš to příkazem `claude -p "hi" --model haiku`.
 - **`palermo MCP: failed`**: Claude Code se nedostal na server. Zkontroluj, že server běží,
   a v konfiguraci používej `http://127.0.0.1:3000` (ve Windows `localhost` někdy míří na IPv6).
+  Runner pak vypíše řádky `MCP debug: …` z ladicího logu Claude Code s přesnou příčinou
+  (celý log je v `%TEMP%\palermo-runs\<hra>\<hráč>\claude-debug-0.log`). V okně serveru uvidíš
+  `[mcp] … connected`, pokud se hráč spojil; když tam nic není, požadavek k serveru vůbec nedošel
+  (proxy, firewall, antivir).
 - Při takové chybě runner hráče znovu nespouští, vypíše postup opravy a nedohranou hru stopne.
   Stopnuté hry se do statistik nepočítají. Starou zaseknutou hru v lobby stopneš v UI tlačítkem **Stop game**.
 

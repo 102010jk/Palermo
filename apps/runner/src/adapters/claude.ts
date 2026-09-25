@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { runProcess, short, tryJson } from '../proc.ts';
 import type { Adapter, AgentContext, Launch, RunResult, Usage } from '../types.ts';
@@ -30,6 +30,19 @@ const PARENT_SESSION_ENV: Record<string, undefined> = Object.fromEntries(
  * Rules mode: built-in tools disabled, custom short system prompt (fewer tokens), only palermo MCP tools.
  * Freedom mode: default Claude Code prompt + all tools, permissions bypassed. Only run this inside a container.
  */
+/** The interesting lines about the palermo MCP connection from a Claude Code debug log, de-duplicated. */
+function mcpErrors(path: string): string[] {
+  if (!existsSync(path)) return [`(no debug log at ${path})`];
+  const seen = new Set<string>();
+  for (const raw of readFileSync(path, 'utf8').split(/\r?\n/)) {
+    if (!raw.includes('MCP server "palermo"')) continue;
+    if (!/error|fail|refused|timeout|proxy|status|certificate|denied|unauthori|40\d|50\d/i.test(raw)) continue;
+    seen.add(raw.replace(/^\S+\s+/, '').slice(0, 400));
+    if (seen.size >= 10) break;
+  }
+  return seen.size ? [...seen] : [`(nothing about palermo in ${path})`];
+}
+
 const AUTH_ERROR = /authenticat|oauth|invalid api key|\/login|not logged in|credit balance/i;
 
 export const claudeAdapter: Adapter = {
@@ -57,6 +70,9 @@ export const claudeAdapter: Adapter = {
     } else {
       args.push('--system-prompt-file', promptPath, '--tools', '', '--allowedTools', 'mcp__palermo', '--permission-mode', 'dontAsk');
     }
+    // Debug log: the only place where Claude Code says *why* an MCP connection failed.
+    const debugPath = join(ctx.workdir, `claude-debug-${launch.attempt}.log`);
+    args.push('--debug-file', debugPath);
     args.push(...(ctx.spec.extraArgs ?? []));
 
     let usage: Usage | undefined;
@@ -100,6 +116,7 @@ export const claudeAdapter: Adapter = {
         }
       },
     });
+    if (fatal?.includes('MCP')) for (const line of mcpErrors(debugPath)) ctx.log(`MCP debug: ${line}`);
     return { exitCode: code, sessionId: sid, usage, fatal };
   },
 };

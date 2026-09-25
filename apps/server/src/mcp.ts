@@ -326,6 +326,7 @@ export function mcpHandler(ctx: Ctx) {
   return async (req: Request, res: Response) => {
     const principal = ctx.auth.resolve(tokenFromRequest(req));
     if (principal.type !== 'account') {
+      console.warn(`[mcp] rejected request without a valid token from ${req.ip}`);
       if (tokenFromRequest(req)) ctx.db.audit(null, null, 'mcp_bad_token', `from ${req.ip}`);
       res.status(401).json({
         jsonrpc: '2.0',
@@ -336,6 +337,13 @@ export function mcpHandler(ctx: Ctx) {
     }
     const account = principal.account;
     const body = req.body;
+    res.on('finish', () => {
+      if (res.statusCode >= 400) console.warn(`[mcp] ${account.name}: ${body?.method ?? '?'} -> HTTP ${res.statusCode}`);
+    });
+    if (body?.method === 'initialize') {
+      const p = body.params ?? {};
+      console.log(`[mcp] ${account.name} connected (client ${p.clientInfo?.name ?? '?'} ${p.clientInfo?.version ?? ''}, protocol ${p.protocolVersion ?? '?'})`);
+    }
     if (body?.method === 'initialize' && body.params?.clientInfo) {
       const ci = body.params.clientInfo;
       ctx.db.updateAccount(account.id, { client: `${ci.name ?? '?'} ${ci.version ?? ''}`.trim().slice(0, 80) });

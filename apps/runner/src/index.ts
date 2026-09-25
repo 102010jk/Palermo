@@ -202,6 +202,8 @@ async function main() {
     cfg.serverBots = 0;
   }
   const api = new Api(cfg.server, cfg.adminToken);
+  const proxy = ['HTTPS_PROXY', 'HTTP_PROXY', 'https_proxy', 'http_proxy', 'ALL_PROXY'].find((k) => process.env[k]);
+  if (proxy) console.log(`Note: ${proxy} is set on this machine; local addresses are excluded for the players (NO_PROXY).`);
   if (values['create-only']) {
     const seats = cfg.agents.length + (cfg.serverBots ?? 0) + (cfg.humanSeats ?? 0);
     const g = await api.createGame({ ...cfg.settings, autoStart: true, seats });

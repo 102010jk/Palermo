@@ -15,6 +15,7 @@
     "build": "npm run build --workspace=@palermo/web",
     "start": "npm run start --workspace=@palermo/server",
     "runner": "npm run start --workspace=@palermo/runner --",
+    "update": "git pull && npm install && npm run build",
     "test": "vitest run",
     "typecheck": "tsc -p packages/engine && tsc -p apps/server && tsc -p apps/runner && tsc -p apps/web"
   },

@@ -14,6 +14,15 @@ export function runProcess(
     for (const k of SECRET_ENV) delete env[k];
     // `undefined` in opts.env means "remove this variable".
     for (const [k, v] of Object.entries(opts.env ?? {})) if (v === undefined) delete env[k];
+    // A system HTTP(S) proxy must never be used for the local game server (Claude Code honours proxy variables,
+    // Node's fetch in the runner does not, which makes the server look reachable to one and not the other).
+    const noProxy = new Set(
+      `${env.NO_PROXY ?? ''},${env.no_proxy ?? ''},localhost,127.0.0.1,::1`
+        .split(',')
+        .map((x) => x.trim())
+        .filter(Boolean),
+    );
+    env.NO_PROXY = env.no_proxy = [...noProxy].join(',');
     const child = spawn(cmd, args, { cwd: opts.cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
     const split = (fn: (l: string) => void) => {
       let buf = '';
