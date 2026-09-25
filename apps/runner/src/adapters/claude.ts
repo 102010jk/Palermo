@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { runProcess, short, tryJson } from '../proc.ts';
 import type { Adapter, AgentContext, Launch, RunResult, Usage } from '../types.ts';
 
@@ -43,6 +44,8 @@ function mcpErrors(path: string): string[] {
   return seen.size ? [...seen] : [`(nothing about palermo in ${path})`];
 }
 
+const BRIDGE = join(dirname(fileURLToPath(import.meta.url)), '..', 'mcp-bridge.mjs');
+
 const AUTH_ERROR = /authenticat|oauth|invalid api key|\/login|not logged in|credit balance/i;
 
 export const claudeAdapter: Adapter = {
@@ -51,7 +54,15 @@ export const claudeAdapter: Adapter = {
     writeFileSync(
       mcpPath,
       JSON.stringify(
-        { mcpServers: { palermo: { type: 'http', url: ctx.mcpUrl, headers: { Authorization: `Bearer ${ctx.token}` } } } },
+        {
+          mcpServers: {
+            palermo:
+              ctx.spec.mcpTransport === 'http'
+                ? { type: 'http', url: ctx.mcpUrl, headers: { Authorization: `Bearer ${ctx.token}` } }
+                : // Default: local stdio bridge running in Node (robust against CLI HTTP-client quirks).
+                  { type: 'stdio', command: process.execPath, args: [BRIDGE, ctx.mcpUrl], env: { PALERMO_TOKEN: ctx.token } },
+          },
+        },
         null,
         2,
       ),

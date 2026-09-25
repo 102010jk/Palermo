@@ -12,6 +12,8 @@ export interface AgentSpec {
   command?: string;
   /** Extra CLI arguments appended as-is. */
   extraArgs?: string[];
+  /** How Claude Code reaches the MCP server: local stdio bridge (default) or direct HTTP. */
+  mcpTransport?: 'bridge' | 'http';
   /** Max relaunches if the CLI exits while the game is still running. */
   maxRestarts?: number;
 }
