@@ -2,6 +2,7 @@
 // Claude Code starts this as a local stdio MCP server; the bridge talks HTTP with Node's own fetch.
 // This avoids HTTP client differences between CLIs (e.g. "InvalidHTTPResponse" on Windows).
 // Usage: node mcp-bridge.mjs <mcpUrl>   (token in env PALERMO_TOKEN)
+import { appendFileSync } from 'node:fs';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
@@ -12,6 +13,22 @@ if (!url || !token) {
   process.exit(2);
 }
 
+const logFile = process.env.PALERMO_BRIDGE_LOG;
+const log = (line) => {
+  const text = `${new Date().toISOString()} ${line}`;
+  console.error(text);
+  if (logFile) {
+    try {
+      appendFileSync(logFile, `${text}\n`);
+    } catch {}
+  }
+};
+const describe = (e) => {
+  const c = e?.cause;
+  return `${e?.message ?? e}${c ? ` (cause: ${c.code ?? ''} ${c.message ?? c})` : ''}`;
+};
+log(`bridge start -> ${url} (node ${process.version}, ${process.platform})`);
+
 const local = new StdioServerTransport();
 const remote = new StreamableHTTPClientTransport(new URL(url), {
   requestInit: { headers: { Authorization: `Bearer ${token}` } },
@@ -19,13 +36,13 @@ const remote = new StreamableHTTPClientTransport(new URL(url), {
 
 local.onmessage = (msg) =>
   remote.send(msg).catch((e) => {
-    console.error(`bridge: ${e.message}`);
+    log(`request ${msg.method ?? '(response)'} failed: ${describe(e)}`);
     if (msg.id !== undefined) {
       local.send({ jsonrpc: '2.0', id: msg.id, error: { code: -32000, message: `Palermo server unreachable: ${e.message}` } });
     }
   });
 remote.onmessage = (msg) => local.send(msg);
-remote.onerror = (e) => console.error(`bridge: ${e.message}`);
+remote.onerror = (e) => log(`transport error: ${describe(e)}`);
 local.onclose = () => remote.close().finally(() => process.exit(0));
 
 await remote.start();

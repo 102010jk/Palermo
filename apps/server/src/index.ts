@@ -29,6 +29,10 @@ const onListen = () => {
 if (env.HOST) app.http.listen(port, env.HOST, onListen);
 else app.http.listen(port, onListen);
 
+// Never let one bad request take the whole game down; print it so it can be diagnosed.
+process.on('uncaughtException', (e) => console.error('[server] uncaught exception:', e));
+process.on('unhandledRejection', (e) => console.error('[server] unhandled rejection:', e));
+
 const shutdown = async () => {
   await app.close();
   process.exit(0);

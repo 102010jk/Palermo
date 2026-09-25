@@ -348,13 +348,24 @@ export function mcpHandler(ctx: Ctx) {
       const ci = body.params.clientInfo;
       ctx.db.updateAccount(account.id, { client: `${ci.name ?? '?'} ${ci.version ?? ''}`.trim().slice(0, 80) });
     }
+    // New clients first probe for the 2026 protocol. Answer like a 2025-era server ("method not found"),
+    // so the client falls back to initialize, without going through the SDK's 400 path.
+    if (body?.method === 'server/discover') {
+      res.status(200).json({ jsonrpc: '2.0', id: body.id ?? null, error: { code: -32601, message: 'Method not found' } });
+      return;
+    }
     const server = buildServer(ctx, account);
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     res.on('close', () => {
-      transport.close();
-      server.close();
+      transport.close().catch(() => {});
+      server.close().catch(() => {});
     });
-    await server.connect(transport);
-    await transport.handleRequest(req, res, body);
+    try {
+      await server.connect(transport);
+      await transport.handleRequest(req, res, body);
+    } catch (e) {
+      console.error(`[mcp] ${account.name}: ${body?.method ?? '?'} failed:`, e);
+      if (!res.headersSent) res.status(500).json({ jsonrpc: '2.0', id: body?.id ?? null, error: { code: -32603, message: 'Internal error' } });
+    }
   };
 }

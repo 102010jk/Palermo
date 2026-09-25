@@ -60,7 +60,12 @@ export const claudeAdapter: Adapter = {
               ctx.spec.mcpTransport === 'http'
                 ? { type: 'http', url: ctx.mcpUrl, headers: { Authorization: `Bearer ${ctx.token}` } }
                 : // Default: local stdio bridge running in Node (robust against CLI HTTP-client quirks).
-                  { type: 'stdio', command: process.execPath, args: [BRIDGE, ctx.mcpUrl], env: { PALERMO_TOKEN: ctx.token } },
+                  {
+                    type: 'stdio',
+                    command: process.execPath,
+                    args: [BRIDGE, ctx.mcpUrl],
+                    env: { PALERMO_TOKEN: ctx.token, PALERMO_BRIDGE_LOG: join(ctx.workdir, 'bridge.log') },
+                  },
           },
         },
         null,
@@ -127,7 +132,13 @@ export const claudeAdapter: Adapter = {
         }
       },
     });
-    if (fatal?.includes('MCP')) for (const line of mcpErrors(debugPath)) ctx.log(`MCP debug: ${line}`);
+    if (fatal?.includes('MCP')) {
+      for (const line of mcpErrors(debugPath)) ctx.log(`MCP debug: ${line}`);
+      const bridgeLog = join(ctx.workdir, 'bridge.log');
+      if (existsSync(bridgeLog)) {
+        for (const line of readFileSync(bridgeLog, 'utf8').trim().split(/\r?\n/).slice(-6)) ctx.log(`bridge: ${line}`);
+      }
+    }
     return { exitCode: code, sessionId: sid, usage, fatal };
   },
 };

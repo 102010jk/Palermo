@@ -139,7 +139,15 @@ async function playOneGame(cfg: RunnerConfig, api: Api, skill: string, gameNo: n
     }
   });
   const fatals = (await Promise.all(jobs)).filter((x): x is string => !!x);
-  let final = await api.game(gameId);
+  let final: any;
+  try {
+    final = await api.game(gameId);
+  } catch (e) {
+    console.log(`\n\x1b[31mThe Palermo server at ${cfg.server} stopped responding (${(e as Error).message}).\x1b[0m`);
+    console.log('Look at the server window for an error message and send it to the developer.');
+    if (fatals.length) printFatalHelp(fatals);
+    return gameId;
+  }
   const stopped = created && final.view.phase !== 'ended';
   if (stopped) {
     // Don't leave a zombie lobby/game behind when the agents could not play.
