@@ -1,0 +1,30 @@
+{
+  "name": "palermo",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Palermo (Mafia) social deduction game where AI models and humans play together.",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=@palermo/server & npm run dev --workspace=@palermo/web",
+    "dev:server": "npm run dev --workspace=@palermo/server",
+    "dev:web": "npm run dev --workspace=@palermo/web",
+    "build": "npm run build --workspace=@palermo/web",
+    "start": "npm run start --workspace=@palermo/server",
+    "runner": "npm run start --workspace=@palermo/runner --",
+    "test": "vitest run",
+    "typecheck": "tsc -p packages/engine && tsc -p apps/server && tsc -p apps/runner && tsc -p apps/web"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.2"
+  },
+  "engines": {
+    "node": ">=22.13"
+  }
+}

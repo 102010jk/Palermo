@@ -1,0 +1,136 @@
+import { useState } from 'react';
+import { api } from '../api.ts';
+
+const ROLE_IDS = ['murderer', 'doctor', 'tracker', 'civilian'];
+
+export function CreateGameForm({ onCreated }: { onCreated: (id: string) => void }) {
+  const [s, setS] = useState({
+    mode: 'classic',
+    seats: 6,
+    autoStart: false,
+    identityVisibility: 'visible',
+    notesMode: 'own',
+    freedomMode: false,
+    publicVotes: true,
+    revealRoleOnDeath: true,
+    allowSkipVote: true,
+    startPhase: 'night',
+    nightTimeoutSec: '180',
+    dayTimeoutSec: '',
+    maxRounds: '15',
+    customRoles: '',
+  });
+  const [error, setError] = useState<string | null>(null);
+  const set = (k: string, v: unknown) => setS((x) => ({ ...x, [k]: v }));
+
+  const submit = async () => {
+    try {
+      setError(null);
+      const roles = s.customRoles.trim()
+        ? s.customRoles.split(/[\s,]+/).filter(Boolean)
+        : 'auto';
+      if (Array.isArray(roles) && roles.some((r) => !ROLE_IDS.includes(r))) throw new Error(`Roles must be from: ${ROLE_IDS.join(', ')}`);
+      const settings = {
+        mode: s.mode,
+        seats: Number(s.seats) || 0,
+        autoStart: s.autoStart,
+        identityVisibility: s.identityVisibility,
+        notesMode: s.notesMode,
+        freedomMode: s.freedomMode,
+        publicVotes: s.publicVotes,
+        revealRoleOnDeath: s.revealRoleOnDeath,
+        allowSkipVote: s.allowSkipVote,
+        startPhase: s.startPhase,
+        nightTimeoutSec: s.nightTimeoutSec ? Number(s.nightTimeoutSec) : null,
+        dayTimeoutSec: s.dayTimeoutSec ? Number(s.dayTimeoutSec) : null,
+        maxRounds: s.maxRounds ? Number(s.maxRounds) : null,
+        roles,
+      };
+      const g = await api('POST', '/api/games', { settings }, { admin: true });
+      onCreated(g.id);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  return (
+    <form
+      className="settings-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit();
+      }}
+    >
+      <label>
+        Mode label
+        <input value={s.mode} onChange={(e) => set('mode', e.target.value)} />
+      </label>
+      <label>
+        Seats
+        <input type="number" min={3} max={30} value={s.seats} onChange={(e) => set('seats', e.target.value)} />
+      </label>
+      <label>
+        Identities
+        <select value={s.identityVisibility} onChange={(e) => set('identityVisibility', e.target.value)}>
+          <option value="visible">Visible (models shown)</option>
+          <option value="anonymous">Anonymous (town names)</option>
+        </select>
+      </label>
+      <label>
+        Notes from past games
+        <select value={s.notesMode} onChange={(e) => set('notesMode', e.target.value)}>
+          <option value="own">Own model's notes</option>
+          <option value="shared">All notes (shared)</option>
+          <option value="none">No notes</option>
+        </select>
+      </label>
+      <label>
+        Game starts with
+        <select value={s.startPhase} onChange={(e) => set('startPhase', e.target.value)}>
+          <option value="night">Night</option>
+          <option value="day">Day</option>
+        </select>
+      </label>
+      <label>
+        Night time limit (s)
+        <input type="number" placeholder="none" value={s.nightTimeoutSec} onChange={(e) => set('nightTimeoutSec', e.target.value)} />
+      </label>
+      <label>
+        Day time limit (s)
+        <input type="number" placeholder="until everyone votes" value={s.dayTimeoutSec} onChange={(e) => set('dayTimeoutSec', e.target.value)} />
+      </label>
+      <label>
+        Max rounds
+        <input type="number" placeholder="unlimited" value={s.maxRounds} onChange={(e) => set('maxRounds', e.target.value)} />
+      </label>
+      <label className="wide">
+        Custom roles (optional)
+        <input
+          placeholder="auto, or e.g. murderer, doctor, tracker, civilian, civilian, civilian"
+          value={s.customRoles}
+          onChange={(e) => set('customRoles', e.target.value)}
+        />
+      </label>
+      <div className="checks wide">
+        {(
+          [
+            ['autoStart', 'Auto-start when all seats are ready'],
+            ['publicVotes', 'Public votes'],
+            ['revealRoleOnDeath', 'Reveal role on death'],
+            ['allowSkipVote', 'Allow "skip" vote'],
+            ['freedomMode', 'No-rules mode (agents get full tools)'],
+          ] as const
+        ).map(([k, label]) => (
+          <label key={k} className="check">
+            <input type="checkbox" checked={s[k] as boolean} onChange={(e) => set(k, e.target.checked)} />
+            {label}
+          </label>
+        ))}
+      </div>
+      {error && <p className="error wide">{error}</p>}
+      <button type="submit" className="wide primary">
+        Create game
+      </button>
+    </form>
+  );
+}

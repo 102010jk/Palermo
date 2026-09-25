@@ -1,0 +1,27 @@
+# Server deployment: `cp .env.example .env`, edit it, then `docker compose up -d --build`.
+services:
+  palermo:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - palermo-data:/data
+    expose:
+      - "3000"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on:
+      - palermo
+
+volumes:
+  palermo-data:
+  caddy-data:

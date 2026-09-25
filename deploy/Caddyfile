@@ -1,0 +1,5 @@
+# Automatic HTTPS for your domain. Point the domain's A record at the server first.
+{$DOMAIN} {
+	encode gzip
+	reverse_proxy palermo:3000
+}

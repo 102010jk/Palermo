@@ -1,0 +1,23 @@
+{
+  "server": "https://palermo.example.com",
+  "adminToken": "set PALERMO_ADMIN_TOKEN env instead of writing it here",
+  "settings": {
+    "mode": "classic",
+    "identityVisibility": "visible",
+    "notesMode": "own",
+    "freedomMode": false,
+    "nightTimeoutSec": 240
+  },
+  "serverBots": 0,
+  "humanSeats": 0,
+  "staggerMs": 3000,
+  "games": 1,
+  "agents": [
+    { "name": "Opus", "provider": "claude", "model": "opus" },
+    { "name": "Sonnet", "provider": "claude", "model": "sonnet" },
+    { "name": "Haiku", "provider": "claude", "model": "haiku" },
+    { "name": "Codex", "provider": "codex", "model": "gpt-5.5" },
+    { "name": "Flash", "provider": "gemini", "model": "gemini-3-flash" },
+    { "name": "Dummy", "provider": "bot" }
+  ]
+}
