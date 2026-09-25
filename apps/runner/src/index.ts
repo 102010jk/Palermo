@@ -44,7 +44,8 @@ const ADAPTERS: Record<AgentSpec['provider'], Adapter> = {
 
 const COLORS = [36, 33, 35, 32, 34, 91, 92, 93, 94, 95, 96];
 
-async function runAgent(ctx: AgentContext, adapter: Adapter): Promise<void> {
+/** Returns a fatal error message if the agent could not play at all. */
+async function runAgent(ctx: AgentContext, adapter: Adapter): Promise<string | undefined> {
   const maxRestarts = ctx.spec.maxRestarts ?? 5;
   let resumeId: string | undefined;
   for (let attempt = 0; attempt <= maxRestarts; attempt++) {
@@ -70,16 +71,22 @@ async function runAgent(ctx: AgentContext, adapter: Adapter): Promise<void> {
       );
     }
     ctx.log(`process exited with code ${res.exitCode}`);
+    if (res.fatal) {
+      ctx.log(`❌ ${res.fatal}. Not relaunching.`);
+      return res.fatal;
+    }
     if (ctx.spec.provider === 'bot') break;
     // Check whether we are done (game over + report written).
     const state = await ctx.api.game(ctx.gameId, ctx.token).catch(() => null);
     const me = state?.view?.you?.id;
     if (state?.view?.phase === 'ended' && (state.reports ?? []).some((r: any) => r.player_id === me)) break;
   }
+  return undefined;
 }
 
 async function playOneGame(cfg: RunnerConfig, api: Api, skill: string, gameNo: number): Promise<string> {
   let gameId = cfg.gameId;
+  const created = !gameId;
   if (!gameId) {
     const seats = cfg.agents.length + (cfg.serverBots ?? 0) + (cfg.humanSeats ?? 0);
     const g = await api.createGame({ ...cfg.settings, autoStart: true, seats });
@@ -125,15 +132,47 @@ async function playOneGame(cfg: RunnerConfig, api: Api, skill: string, gameNo: n
       },
     };
     try {
-      await runAgent(ctx, ADAPTERS[spec.provider]);
+      return await runAgent(ctx, ADAPTERS[spec.provider]);
     } catch (e) {
       ctx.log(`crashed: ${(e as Error).stack ?? e}`);
+      return undefined;
     }
   });
-  await Promise.all(jobs);
-  const final = await api.game(gameId);
-  console.log(`\nGame ${gameNo} (${gameId}) finished: phase=${final.view.phase}, winner=${final.view.winner ?? '-'}`);
+  const fatals = (await Promise.all(jobs)).filter((x): x is string => !!x);
+  let final = await api.game(gameId);
+  const stopped = created && final.view.phase !== 'ended';
+  if (stopped) {
+    // Don't leave a zombie lobby/game behind when the agents could not play.
+    await api.req('POST', `/api/games/${gameId}/abort`, {}).catch(() => {});
+    final = await api.game(gameId);
+  }
+  if (fatals.length) printFatalHelp(fatals);
+  console.log(
+    stopped
+      ? `\nGame ${gameNo} (${gameId}) was stopped: the agents did not finish it (not counted in stats).`
+      : `\nGame ${gameNo} (${gameId}) finished: phase=${final.view.phase}, winner=${final.view.winner ?? '-'}`,
+  );
   return gameId;
+}
+
+function printFatalHelp(fatals: string[]) {
+  const unique = [...new Set(fatals)];
+  console.log('\n\x1b[31mThe agents could not play:\x1b[0m');
+  for (const f of unique) console.log(`  • ${f}`);
+  if (unique.some((f) => f.includes('not logged in'))) {
+    console.log(
+      '\n  Fix the Claude login: run `claude` once and use /login, or better create a long-lived token with\n' +
+        '  `claude setup-token` and set it before starting the runner (works reliably with many parallel players):\n' +
+        '    PowerShell: $env:CLAUDE_CODE_OAUTH_TOKEN="<token>"\n' +
+        '    bash:       export CLAUDE_CODE_OAUTH_TOKEN=<token>',
+    );
+  }
+  if (unique.some((f) => f.includes('MCP'))) {
+    console.log(
+      '\n  Fix MCP: make sure the server runs and the "server" URL in the config is reachable from this machine.\n' +
+        '  On Windows prefer http://127.0.0.1:3000 over http://localhost:3000.',
+    );
+  }
 }
 
 async function main() {

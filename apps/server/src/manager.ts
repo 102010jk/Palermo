@@ -82,6 +82,11 @@ export class GameManager extends EventEmitter {
     return state ? Game.fromState(state) : null;
   }
 
+  /** A game currently held in memory (running, lobby, or recently finished). */
+  liveGame(id: string): Game | null {
+    return this.live.get(id)?.game ?? null;
+  }
+
   mustLive(id: string): Live {
     const l = this.live.get(id);
     if (!l) {

@@ -30,6 +30,8 @@ const PARENT_SESSION_ENV: Record<string, undefined> = Object.fromEntries(
  * Rules mode: built-in tools disabled, custom short system prompt (fewer tokens), only palermo MCP tools.
  * Freedom mode: default Claude Code prompt + all tools, permissions bypassed. Only run this inside a container.
  */
+const AUTH_ERROR = /authenticat|oauth|invalid api key|\/login|not logged in|credit balance/i;
+
 export const claudeAdapter: Adapter = {
   async run(ctx: AgentContext, launch: Launch): Promise<RunResult> {
     const mcpPath = join(ctx.workdir, 'mcp.json');
@@ -59,6 +61,7 @@ export const claudeAdapter: Adapter = {
 
     let usage: Usage | undefined;
     let sid = sessionId;
+    let fatal: string | undefined;
     const code = await runProcess(ctx.spec.command ?? 'claude', args, {
       cwd: ctx.workdir,
       env: { MCP_TOOL_TIMEOUT: '300000', MCP_TIMEOUT: '60000', ...PARENT_SESSION_ENV },
@@ -71,9 +74,16 @@ export const claudeAdapter: Adapter = {
           const srv = (m.mcp_servers ?? []).find((s: any) => s.name === 'palermo');
           ctx.log(`session ${sid}, model ${m.model ?? '?'}, palermo MCP: ${srv?.status ?? 'missing'}`);
           if (m.model) ctx.reportModel(String(m.model));
+          if (srv?.status !== 'connected') {
+            ctx.log(`MCP details: ${short(JSON.stringify(srv ?? {}), 300)}`);
+            fatal = `Claude Code could not connect to the palermo MCP server at ${ctx.mcpUrl}`;
+          }
         } else if (m.type === 'assistant') {
           for (const c of m.message?.content ?? []) {
-            if (c.type === 'text' && c.text?.trim()) ctx.log(`💬 ${short(c.text)}`);
+            if (c.type === 'text' && c.text?.trim()) {
+              ctx.log(`💬 ${short(c.text)}`);
+              if (AUTH_ERROR.test(c.text)) fatal = `Claude Code is not logged in: ${short(c.text, 120)}`;
+            }
             if (c.type === 'tool_use') ctx.log(`🔧 ${String(c.name).replace('mcp__palermo__', '')} ${short(JSON.stringify(c.input ?? {}), 200)}`);
           }
         } else if (m.type === 'result') {
@@ -90,6 +100,6 @@ export const claudeAdapter: Adapter = {
         }
       },
     });
-    return { exitCode: code, sessionId: sid, usage };
+    return { exitCode: code, sessionId: sid, usage, fatal };
   },
 };

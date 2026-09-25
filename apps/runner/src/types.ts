@@ -49,6 +49,8 @@ export interface Launch {
 
 export interface RunResult {
   exitCode: number | null;
+  /** Unrecoverable problem (not logged in, MCP unreachable): relaunching would not help. */
+  fatal?: string;
   sessionId?: string;
   usage?: Usage;
 }

@@ -132,6 +132,8 @@ export interface GameState {
   selfProtectUsed: string[];
   events: GameEvent[];
   winner: Winner | null;
+  /** Stopped by the host (or the runner): not a real result, excluded from statistics. */
+  aborted?: boolean;
   createdAt: number;
   startedAt: number | null;
   endedAt: number | null;

@@ -3,7 +3,7 @@ import { createServer, type Server as HttpServer } from 'node:http';
 import { join } from 'node:path';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { Server as IoServer, type Socket } from 'socket.io';
-import { DEFAULT_SETTINGS, GameError, type Game, type GameSettings } from '@palermo/engine';
+import { DEFAULT_SETTINGS, GameError, type Game, type GameSettings, type GameState } from '@palermo/engine';
 import { Auth, tokenFromRequest, type Principal } from './auth.ts';
 import { Db } from './db.ts';
 import { GameManager, type ManagerOptions } from './manager.ts';
@@ -169,7 +169,8 @@ export function createPalermo(cfg: AppConfig): PalermoApp {
 
   // ------------------------------------------------------------------ games
   const gameSummary = (row: Record<string, unknown>) => {
-    const live = manager.get(row.id as string);
+    // Live games from memory; finished ones from the small snapshot (never load their full event log here).
+    const live = manager.liveGame(row.id as string)?.state ?? (JSON.parse(row.state as string) as GameState);
     return {
       id: row.id,
       phase: row.phase,
@@ -179,11 +180,13 @@ export function createPalermo(cfg: AppConfig): PalermoApp {
       createdAt: row.created_at,
       startedAt: row.started_at,
       endedAt: row.ended_at,
-      round: live?.state.round ?? null,
-      players:
-        live && live.state.phase === 'lobby'
-          ? live.state.players.map((p) => ({ name: p.name, kind: p.kind, model: p.model, ready: p.ready }))
-          : undefined,
+      round: live.round || null,
+      aborted: !!live.aborted,
+      players: live.players.map((p) => {
+        // Anonymous games must not reveal who is behind a seat while they run.
+        const hide = live.settings.identityVisibility === 'anonymous' && live.phase !== 'lobby' && live.phase !== 'ended';
+        return { name: p.publicName, kind: hide ? undefined : p.kind, model: hide ? undefined : p.model, ready: p.ready, alive: p.alive };
+      }),
     };
   };
   const listGames = () => db.listGames(200).map(gameSummary);

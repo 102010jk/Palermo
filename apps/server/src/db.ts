@@ -264,7 +264,7 @@ export class Db {
   listGames(limit = 100): Row[] {
     return this.sql
       .prepare(
-        'SELECT id, settings, phase, winner, player_count, created_at, started_at, ended_at FROM games ORDER BY created_at DESC LIMIT ?',
+        'SELECT id, settings, phase, winner, player_count, created_at, started_at, ended_at, state FROM games ORDER BY created_at DESC LIMIT ?',
       )
       .all(limit) as Row[];
   }

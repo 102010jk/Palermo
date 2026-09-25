@@ -97,7 +97,10 @@ function matches(settings: GameSettings, row: Row, f: StatsFilter, derived: Reco
 
 export function computeStats(db: Db, filter: StatsFilter = { settings: {} }): StatsResult {
   const playersStmt = db.sql.prepare('SELECT * FROM game_players WHERE game_id = ?');
-  const allEnded = db.sql.prepare("SELECT * FROM games WHERE phase = 'ended' ORDER BY ended_at").all() as Row[];
+  // Games stopped by the host are not results.
+  const allEnded = (db.sql.prepare("SELECT * FROM games WHERE phase = 'ended' ORDER BY ended_at").all() as Row[]).filter(
+    (g) => !(JSON.parse(g.state as string) as { aborted?: boolean }).aborted,
+  );
   const derivedOf = new Map(allEnded.map((g) => [g.id as string, lineupOf(playersStmt.all(g.id as string) as Row[])]));
 
   const settingValues: Record<string, Set<string>> = {};

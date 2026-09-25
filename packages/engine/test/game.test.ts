@@ -59,6 +59,15 @@ describe('start', () => {
   });
 });
 
+describe('abort', () => {
+  it('marks stopped games so stats can skip them', () => {
+    const { g } = setup(['murderer', 'doctor', 'civilian', 'civilian']);
+    g.abort();
+    expect(g.state.phase).toBe('ended');
+    expect(g.state.aborted).toBe(true);
+  });
+});
+
 describe('night', () => {
   it('murderer kills an unprotected target', () => {
     const { g, byRole } = setup(['murderer', 'doctor', 'tracker', 'civilian', 'civilian', 'civilian']);

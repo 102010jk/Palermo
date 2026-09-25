@@ -13,6 +13,7 @@ interface GameRow {
   createdAt: number;
   endedAt: number | null;
   round: number | null;
+  aborted?: boolean;
   players?: { name: string; kind: string; model?: string; ready: boolean }[];
 }
 
@@ -202,7 +203,9 @@ export function Home() {
               {finished.map((g) => (
                 <li key={g.id}>
                   <Link to={`/game/${g.id}`}>
-                    <span className={`winner ${g.winner}`}>{g.winner === 'mafia' ? 'Murderers won' : g.winner === 'town' ? 'Town won' : 'Draw'}</span>
+                    <span className={`winner ${g.aborted ? '' : g.winner}`}>
+                      {g.aborted ? 'Stopped' : g.winner === 'mafia' ? 'Murderers won' : g.winner === 'town' ? 'Town won' : 'Draw'}
+                    </span>
                     <span className="muted"> · {g.playerCount} players · {g.settings.mode} · {new Date(g.endedAt ?? g.createdAt).toLocaleString()}</span>
                   </Link>
                 </li>

@@ -307,6 +307,7 @@ export class Game {
   /** Admin: stop the game without a winner. */
   abort(reason = 'The host stopped the game.'): GameEvent[] {
     if (this.state.phase === 'ended') return [];
+    this.state.aborted = true;
     return this.endGame('draw', reason);
   }
 

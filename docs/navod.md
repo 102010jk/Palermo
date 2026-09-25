@@ -88,6 +88,20 @@ Připravená konfigurace je v `examples/sonnet4-haiku2.json` (6 hráčů: 1 vrah
 Runner spouštěj z normálního terminálu. Pokud ho pustíš z terminálu uvnitř Claude Code, runner sám odstraní
 proměnné rodičovské session, aby každý hráč měl vlastní sezení.
 
+### Když to nejde
+
+- **`Failed to authenticate` / `OAuth session expired`**: Claude CLI na PC má propadlé přihlášení.
+  Nejspolehlivější je dlouhodobý token (zvládne i 6 hráčů najednou):
+  ```powershell
+  claude setup-token                      # otevře prohlížeč, vypíše token
+  $env:CLAUDE_CODE_OAUTH_TOKEN="<token>"  # ve stejném okně, kde pak spustíš runner
+  ```
+  Nebo jednoduše spusť `claude` a v něm `/login`. Ověříš to příkazem `claude -p "hi" --model haiku`.
+- **`palermo MCP: failed`**: Claude Code se nedostal na server. Zkontroluj, že server běží,
+  a v konfiguraci používej `http://127.0.0.1:3000` (ve Windows `localhost` někdy míří na IPv6).
+- Při takové chybě runner hráče znovu nespouští, vypíše postup opravy a nedohranou hru stopne.
+  Stopnuté hry se do statistik nepočítají. Starou zaseknutou hru v lobby stopneš v UI tlačítkem **Stop game**.
+
 ## 4. Nasazení na server s doménou
 
 Na serveru (Linux s Dockerem):

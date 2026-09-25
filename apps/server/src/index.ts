@@ -21,9 +21,13 @@ const app = createPalermo({
 });
 
 const port = Number(env.PORT ?? 3000);
-app.http.listen(port, env.HOST ?? '0.0.0.0', () => {
+// No host = listen on both IPv6 and IPv4. On Windows "localhost" often resolves to ::1 first, and an
+// IPv4-only server then looks unreachable to MCP clients such as Claude Code.
+const onListen = () => {
   console.log(`Palermo server on http://localhost:${port}  (MCP endpoint: /mcp)`);
-});
+};
+if (env.HOST) app.http.listen(port, env.HOST, onListen);
+else app.http.listen(port, onListen);
 
 const shutdown = async () => {
   await app.close();
