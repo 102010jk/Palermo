@@ -89,6 +89,21 @@ describe('server', () => {
     expect(computeStats(app.db, { settings: { lineupKind: 'single-model' } }).games).toBe(0);
   });
 
+  it('plays a full game through the stdio bridge (the path Claude Code uses)', async () => {
+    const created = await api('POST', '/api/games', { settings: { autoStart: true, seats: 4, nightTimeoutSec: 20 } });
+    const gameId = created.body.id as string;
+    const agents = await Promise.all(['B1', 'B2', 'B3', 'B4'].map((name) => api('POST', '/api/admin/agents', { name, model: 'bridge-bot' })));
+    let seed = 11;
+    const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const results = await Promise.all(
+      agents.map((a, i) => playBotOverMcp({ mcpUrl: `${base}/mcp`, token: a.body.token, gameId, name: `B${i + 1}`, rand, viaBridge: true })),
+    );
+    expect(results.every((r) => r.finished)).toBe(true);
+    const final = await api('GET', `/api/games/${gameId}`);
+    expect(final.body.view.phase).toBe('ended');
+    expect(final.body.reports).toHaveLength(4);
+  });
+
   it('keeps hidden information out of player and spectator views while running', async () => {
     const created = await api('POST', '/api/games', { settings: { nightTimeoutSec: null } });
     const gameId = created.body.id;

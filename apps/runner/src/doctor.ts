@@ -94,10 +94,36 @@ export async function doctor(server: string, api: Api): Promise<void> {
     return (r.content[0]?.text ?? '').split('\n')[0];
   });
 
-  await step('6. stdio bridge (how Claude Code connects): initialize + tools/list', async () => {
+  await bridgeStep('6. stdio bridge (how Claude Code connects): initialize + tools/list', mcpUrl, token, process.env, false);
+  // Claude Code starts MCP servers with a reduced environment; mimic that and hold a long-poll open.
+  const game = await api.createGame({ mode: 'doctor' }).catch(() => null);
+  if (game) {
+    await bridgeStep('7. bridge with minimal environment + a 3 s wait_for_events', mcpUrl, token, minimalEnv(), game.id);
+    await api.req('POST', `/api/games/${game.id}/abort`, {}).catch(() => {});
+  }
+
+  console.log('\nSend this whole output (and the server window) if something failed.');
+}
+
+/** The environment MCP clients typically pass to stdio servers (see the MCP SDK's getDefaultEnvironment). */
+function minimalEnv(): NodeJS.ProcessEnv {
+  const keys =
+    process.platform === 'win32'
+      ? ['APPDATA', 'HOMEDRIVE', 'HOMEPATH', 'LOCALAPPDATA', 'PATH', 'PROCESSOR_ARCHITECTURE', 'SYSTEMDRIVE', 'SYSTEMROOT', 'TEMP', 'USERNAME', 'USERPROFILE', 'PROGRAMFILES']
+      : ['HOME', 'LOGNAME', 'PATH', 'SHELL', 'TERM', 'USER'];
+  const env: NodeJS.ProcessEnv = {};
+  for (const k of keys) {
+    const hit = Object.keys(process.env).find((x) => x.toUpperCase() === k);
+    if (hit) env[hit] = process.env[hit];
+  }
+  return env;
+}
+
+async function bridgeStep(name: string, mcpUrl: string, token: string, baseEnv: NodeJS.ProcessEnv, longPollGame: string | false) {
+  await step(name, async () => {
     const logFile = join(tmpdir(), `palermo-doctor-bridge-${Date.now()}.log`);
     const child = spawn(process.execPath, [BRIDGE, mcpUrl], {
-      env: { ...process.env, PALERMO_TOKEN: token, PALERMO_BRIDGE_LOG: logFile },
+      env: { ...baseEnv, PALERMO_TOKEN: token, PALERMO_BRIDGE_LOG: logFile },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     const lines: string[] = [];
@@ -133,7 +159,18 @@ export async function doctor(server: string, api: Api): Promise<void> {
       send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} });
       const list = await waitFor(2);
       if (list.error) throw new Error(`tools/list error: ${JSON.stringify(list.error)}`);
-      return `${list.result.tools.length} tools`;
+      if (!longPollGame) return `${list.result.tools.length} tools`;
+      const call = async (id: number, name: string, args: Record<string, unknown>) => {
+        send({ jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args } });
+        const r = await waitFor(id, 20000);
+        if (r.error) throw new Error(`${name} error: ${JSON.stringify(r.error)}`);
+        return String(r.result?.content?.[0]?.text ?? '');
+      };
+      await call(3, 'login', { model: 'doctor' });
+      await call(5, 'join_game', { game_id: longPollGame });
+      const t = Date.now();
+      const waited = await call(4, 'wait_for_events', { max_wait_seconds: 3 });
+      return `long-poll returned after ${Date.now() - t} ms: ${waited.split('\n')[0].slice(0, 80)}`;
     } catch (e) {
       const log = existsSync(logFile) ? readFileSync(logFile, 'utf8').trim() : '(no bridge log)';
       throw new Error(`${describe(e)}\n      bridge log:\n      ${log.split(/\r?\n/).join('\n      ')}`);
@@ -142,6 +179,4 @@ export async function doctor(server: string, api: Api): Promise<void> {
       rmSync(logFile, { force: true });
     }
   });
-
-  console.log('\nSend this whole output (and the server window) if something failed.');
 }

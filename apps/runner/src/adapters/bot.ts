@@ -1,6 +1,11 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { Adapter, AgentContext, Launch, RunResult } from '../types.ts';
+
+const BRIDGE = join(dirname(fileURLToPath(import.meta.url)), '..', 'mcp-bridge.mjs');
 
 /**
  * Scripted player that talks to the server exactly like an AI agent would (over MCP), but decides randomly.
@@ -14,13 +19,17 @@ export async function playBotOverMcp(opts: {
   log?: (l: string) => void;
   rand?: () => number;
   maxSteps?: number;
+  /** Connect through the stdio bridge, exactly like Claude Code does. */
+  viaBridge?: boolean;
 }): Promise<{ finished: boolean; steps: number }> {
   const log = opts.log ?? (() => {});
   const rand = opts.rand ?? Math.random;
   const client = new Client({ name: 'palermo-bot', version: '0.1.0' });
-  const transport = new StreamableHTTPClientTransport(new URL(opts.mcpUrl), {
-    requestInit: { headers: { Authorization: `Bearer ${opts.token}` } },
-  });
+  const transport = opts.viaBridge
+    ? new StdioClientTransport({ command: process.execPath, args: [BRIDGE, opts.mcpUrl], env: { PALERMO_TOKEN: opts.token }, stderr: 'ignore' })
+    : new StreamableHTTPClientTransport(new URL(opts.mcpUrl), {
+        requestInit: { headers: { Authorization: `Bearer ${opts.token}` } },
+      });
   await client.connect(transport);
   const call = async (name: string, args: Record<string, unknown> = {}): Promise<string> => {
     const r = (await client.callTool({ name, arguments: args }, undefined, { timeout: 200_000 })) as {
@@ -72,7 +81,14 @@ export async function playBotOverMcp(opts: {
 
 export const botAdapter: Adapter = {
   async run(ctx: AgentContext, _launch: Launch): Promise<RunResult> {
-    const r = await playBotOverMcp({ mcpUrl: ctx.mcpUrl, token: ctx.token, gameId: ctx.gameId, name: ctx.spec.name, log: ctx.log });
+    const r = await playBotOverMcp({
+      mcpUrl: ctx.mcpUrl,
+      token: ctx.token,
+      gameId: ctx.gameId,
+      name: ctx.spec.name,
+      log: ctx.log,
+      viaBridge: ctx.spec.mcpTransport === 'bridge',
+    });
     ctx.log(`bot finished=${r.finished} after ${r.steps} steps`);
     return { exitCode: r.finished ? 0 : 1 };
   },
