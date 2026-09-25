@@ -57,10 +57,35 @@ export function modelLabel(p: { kind: string; provider: string | null; model: st
   return { key: `agent:${p.name}`, label: `${p.name} (unknown model)` };
 }
 
-function matches(settings: GameSettings, row: Row, f: StatsFilter): boolean {
+/**
+ * Attributes derived from who actually sat at the table. They are filterable like settings, so e.g.
+ * "4x Sonnet + 2x Haiku" games never mix with multi-provider games.
+ */
+export function lineupOf(players: Row[]): { lineup: string; lineupKind: string; withHumans: string } {
+  const counts = new Map<string, number>();
+  const providers = new Set<string>();
+  const models = new Set<string>();
+  let humans = 0;
+  for (const p of players) {
+    if (p.kind === 'human') {
+      humans++;
+      continue;
+    }
+    const { key, label } = modelLabel(p as never);
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+    providers.add(key.split(':')[0]);
+    models.add(key);
+  }
+  const parts = [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([l, n]) => `${l} ×${n}`);
+  if (humans) parts.push(`human ×${humans}`);
+  const lineupKind = models.size <= 1 ? 'single-model' : providers.size === 1 ? 'single-provider' : 'multi-provider';
+  return { lineup: parts.join(' + '), lineupKind, withHumans: humans ? 'yes' : 'no' };
+}
+
+function matches(settings: GameSettings, row: Row, f: StatsFilter, derived: Record<string, string>): boolean {
   for (const [k, v] of Object.entries(f.settings)) {
     if (v === '' || v === undefined) continue;
-    const actual = (settings as unknown as Record<string, unknown>)[k];
+    const actual = k in derived ? derived[k] : (settings as unknown as Record<string, unknown>)[k];
     const s = Array.isArray(actual) ? actual.join(',') : String(actual);
     if (s !== v) return false;
   }
@@ -71,17 +96,19 @@ function matches(settings: GameSettings, row: Row, f: StatsFilter): boolean {
 }
 
 export function computeStats(db: Db, filter: StatsFilter = { settings: {} }): StatsResult {
-  const games = (db.sql.prepare("SELECT * FROM games WHERE phase = 'ended' ORDER BY ended_at").all() as Row[]).filter((g) =>
-    matches(JSON.parse(g.settings as string), g, filter),
-  );
+  const playersStmt = db.sql.prepare('SELECT * FROM game_players WHERE game_id = ?');
+  const allEnded = db.sql.prepare("SELECT * FROM games WHERE phase = 'ended' ORDER BY ended_at").all() as Row[];
+  const derivedOf = new Map(allEnded.map((g) => [g.id as string, lineupOf(playersStmt.all(g.id as string) as Row[])]));
 
   const settingValues: Record<string, Set<string>> = {};
-  for (const g of db.sql.prepare("SELECT settings FROM games WHERE phase = 'ended'").all() as Row[]) {
-    const s = JSON.parse(g.settings as string) as Record<string, unknown>;
+  for (const g of allEnded) {
+    const s = { ...(JSON.parse(g.settings as string) as Record<string, unknown>), ...derivedOf.get(g.id as string) };
     for (const [k, v] of Object.entries(s)) {
       (settingValues[k] ??= new Set()).add(Array.isArray(v) ? v.join(',') : String(v));
     }
   }
+
+  const games = allEnded.filter((g) => matches(JSON.parse(g.settings as string), g, filter, derivedOf.get(g.id as string)!));
 
   const buckets = new Map<string, Bucket>();
   const roleAgg = new Map<string, { games: number; wins: number }>();
@@ -103,7 +130,6 @@ export function computeStats(db: Db, filter: StatsFilter = { settings: {} }): St
   };
   const msgLen = new Map<string, number>();
 
-  const playersStmt = db.sql.prepare('SELECT * FROM game_players WHERE game_id = ?');
   const eventsStmt = db.sql.prepare(
     "SELECT type, actor, data, round FROM events WHERE game_id = ? AND type IN ('chat','notice')",
   );

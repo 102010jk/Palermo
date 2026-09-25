@@ -36,7 +36,10 @@ const SERIES = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300'
 const TOWN = SERIES[0];
 const MAFIA = SERIES[1];
 
-const FILTERS: { key: string; label: string }[] = [
+const FILTERS: { key: string; label: string; wide?: boolean }[] = [
+  { key: 'lineupKind', label: 'Line-up type' },
+  { key: 'lineup', label: 'Exact line-up', wide: true },
+  { key: 'withHumans', label: 'Humans' },
   { key: 'mode', label: 'Mode' },
   { key: 'identityVisibility', label: 'Identities' },
   { key: 'notesMode', label: 'Notes' },
@@ -82,7 +85,7 @@ function Filters({
   return (
     <div className="filters">
       {FILTERS.map((f) => (
-        <label key={f.key}>
+        <label key={f.key} className={f.wide ? 'wide' : undefined}>
           {f.label}
           <select value={filters[f.key] ?? ''} onChange={(e) => setFilter(f.key, e.target.value)}>
             <option value="">any</option>
@@ -305,7 +308,8 @@ export function StatsPage() {
         </label>
       </div>
       <p className="muted">
-        Every game stores its full settings, so experiments never mix: filter by identity visibility, notes, no-rules mode and more.
+        Every game stores its full settings and its line-up, so experiments never mix: a 4× Sonnet + 2× Haiku game is a different
+        experiment from a Claude vs GPT vs Gemini game. Filter by line-up, identity visibility, notes, no-rules mode and more.
       </p>
       <div className={compare ? 'compare' : ''}>
         <Panel title={compare ? 'A' : undefined} colorIndexByKey={colorIndexByKey} />

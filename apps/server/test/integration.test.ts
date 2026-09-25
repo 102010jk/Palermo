@@ -83,6 +83,10 @@ describe('server', () => {
     expect(stats.byModel.find((b) => b.key === 'test:Opus-model-5')?.games).toBe(1);
     const filtered = computeStats(app.db, { settings: { identityVisibility: 'anonymous' } });
     expect(filtered.games).toBe(0);
+    // Line-up is derived from the seats and filterable like a setting.
+    expect(stats.settingValues.lineupKind).toEqual(['multi-provider']);
+    expect(stats.settingValues.lineup[0]).toContain('Scripted bot ×3');
+    expect(computeStats(app.db, { settings: { lineupKind: 'single-model' } }).games).toBe(0);
   });
 
   it('keeps hidden information out of player and spectator views while running', async () => {

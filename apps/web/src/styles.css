@@ -913,6 +913,9 @@ button:focus-visible {
 .filters input {
   width: 80px;
 }
+.filters .wide select {
+  max-width: 360px;
+}
 .tiles {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
