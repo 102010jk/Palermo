@@ -110,6 +110,13 @@ proměnné rodičovské session, aby každý hráč měl vlastní sezení.
 
 ### Když to nejde
 
+Nejdřív spusť **`doctor.bat`** (server musí běžet). Bez použití AI otestuje každý krok spojení
+(server, MCP, most přes lokální rouru i přes TCP, dlouhé čekání) a pak odehraje zkušební hru 5 botů
+přesně stejnou cestou, jakou používá Claude. Nic to nestojí. Když všechno projde, `play.bat` poběží.
+
+Hráči se k serveru připojují přes lokální most a pojmenovanou rouru Windows (`\\.\pipe\palermo-3000`),
+ne přes síť. Na to nemají vliv proxy ani antivir kontrolující webový provoz. Síť (TCP) je jen záloha.
+
 - **`Failed to authenticate` / `OAuth session expired`**: Claude CLI na PC má propadlé přihlášení.
   Nejspolehlivější je dlouhodobý token (zvládne i 6 hráčů najednou):
   ```powershell
