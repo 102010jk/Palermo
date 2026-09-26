@@ -602,6 +602,9 @@ button:focus-visible {
 .roletag.ventriloquist {
   background: #8a2f5c;
 }
+.roletag.mail_bird {
+  background: #2f6f8a;
+}
 .roletag[class*='crazy_'] {
   background: repeating-linear-gradient(45deg, #5a2d6b, #5a2d6b 4px, #3b1d47 4px, #3b1d47 8px);
 }
@@ -1784,4 +1787,36 @@ button:focus-visible {
   .stage-text {
     font-size: 0.95rem;
   }
+}
+
+/* Mail bird and last words */
+.mail-card textarea {
+  width: 100%;
+  min-height: 70px;
+  margin: 6px 0;
+}
+.mail-card .row {
+  margin: 4px 0;
+}
+.mail-card input {
+  flex: 1;
+  min-width: 160px;
+}
+.mail-modes button.selected {
+  outline: 2px solid var(--accent);
+}
+.ev.letter .pill {
+  color: #6fb7d6;
+}
+.ev.testament {
+  color: #9fd3ea;
+}
+.ev.last-words .pill {
+  color: #c9b7a0;
+}
+.stage.last {
+  background: #efe9e1;
+}
+.stage.testament {
+  background: #e6f3f9;
 }

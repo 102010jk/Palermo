@@ -56,7 +56,10 @@ export function formatStatus(g: Game, playerId: string): string {
     lines.push(`Chat limits: ${parts.join(', ')}. Staying silent is allowed.`);
   }
   if (v.you && !v.you.alive && g.state.phase !== 'ended') {
-    lines.push('You are dead. Call wait_for_events (max_wait_seconds 120); you will be woken when the game ends.');
+    lines.push(
+      (v.required.kind === 'last_words' ? 'You are dead. If you want, leave one public message with last_words first. Then c' : 'You are dead. C') +
+        'all wait_for_events (max_wait_seconds 120); you will be woken when the game ends.',
+    );
   }
   const r = v.required;
   if (v.paused) lines.push(`PAUSED (${v.paused.reason}): timers are stopped. Keep calling wait_for_events.`);
@@ -68,6 +71,12 @@ export function formatStatus(g: Game, playerId: string): string {
   } else if (r.kind !== 'none' || !r.done) {
     lines.push(`${r.done ? 'Done' : 'YOUR MOVE'}: ${r.hint}${r.options ? ` Options: ${r.options.join(', ')}` : ''}`);
     if (r.dayAction?.kind === 'shoot') lines.push(`Gunman: shoot one of ${r.dayAction.options.join(', ')} (once per game).`);
+    if (r.mail) {
+      lines.push(
+        `Mail Bird: mail_bird with mode letters / connect${r.mail.testamentAvailable ? ' / testament' : ''} / none. Players: ${(r.options ?? []).join(', ')}.`,
+      );
+    }
+    if (r.links?.length) lines.push(`Mail bird link: bird_message to ${r.links.join(' or ')} (one private message each).`);
     if (r.dayAction?.kind === 'throw_voice') {
       lines.push(`Ventriloquist: throw_voice as one of ${r.dayAction.options.join(', ')} (once today): your message appears in their name.`);
     }

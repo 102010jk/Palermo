@@ -244,3 +244,104 @@ describe('ventriloquist', () => {
     expect(g.state.events.some((e) => (e.data as { kind?: string; chatSeq?: number } | undefined)?.chatSeq === line.seq)).toBe(true);
   });
 });
+
+describe('mail bird', () => {
+  const lineup: RoleId[] = ['murderer', 'mail_bird', 'doctor', 'civilian', 'civilian', 'civilian'];
+  const endNight = (g: Game, one: (r: RoleId) => { id: string }, victim: string, save: string) => {
+    g.nightAction(one('doctor').id, save);
+    g.nightAction(one('murderer').id, victim);
+  };
+
+  it('the night waits for the bird; letters arrive at dawn without the sender', () => {
+    const { g, one, all } = setup(lineup);
+    const bird = one('mail_bird');
+    const [c1, c2, c3] = all('civilian');
+    expect(g.required(bird.id).kind).toBe('mail');
+    endNight(g, one, c3.id, c3.id);
+    expect(g.state.phase).toBe('night'); // still waiting for the bird
+    g.mailBird(bird.id, { mode: 'letters', letters: [{ to: c1.publicName, message: 'Trust C2.' }, { to: c2.publicName, message: 'Watch the doctor claim.' }] });
+    expect(g.state.phase).toBe('day');
+    const letter = g.eventsFor(c1.id).find((e) => e.type === 'letter')!;
+    expect(letter.text).toContain('Trust C2.');
+    expect(letter.text).not.toContain(bird.publicName);
+    expect(letter.actor).toBeUndefined();
+    expect(g.eventsFor(c3.id).some((e) => e.type === 'letter')).toBe(false);
+    expect(() => g.mailBird(bird.id, { mode: 'letters', letters: [] })).toThrow(/only flies at night/);
+  });
+
+  it('connect: the linked players may each send the other one private message the next day', () => {
+    const { g, one, all } = setup(lineup);
+    const bird = one('mail_bird');
+    const [c1, c2, c3] = all('civilian');
+    expect(() => g.mailBird(bird.id, { mode: 'connect', a: bird.publicName, b: c1.publicName })).toThrow(/two other players/);
+    g.mailBird(bird.id, { mode: 'connect', a: c1.publicName, b: c2.publicName });
+    endNight(g, one, c3.id, c3.id);
+    expect(g.required(c1.id).links).toEqual([c2.publicName]);
+    g.birdMessage(c1.id, c2.publicName, 'I am a civilian, you?');
+    expect(() => g.birdMessage(c1.id, c2.publicName, 'again')).toThrow(/already sent/);
+    expect(() => g.birdMessage(c3.id, c1.publicName, 'hi')).toThrow(/No mail bird links/);
+    const seen = (id: string) => g.eventsFor(id).some((e) => e.type === 'letter' && e.text.includes('I am a civilian'));
+    expect(seen(c2.id)).toBe(true);
+    expect(seen(c1.id)).toBe(true);
+    expect(seen(c3.id)).toBe(false);
+    g.birdMessage(c2.id, c1.publicName, 'Civilian too.');
+    expect(g.required(c2.id).links).toBeUndefined();
+  });
+
+  it('testament: once per game instead of mail, read out to everyone when the bird dies', () => {
+    const { g, one, all } = setup(lineup);
+    const bird = one('mail_bird');
+    const [c1] = all('civilian');
+    g.mailBird(bird.id, { mode: 'testament', message: 'I linked C1 and C2 on night 1.' });
+    endNight(g, one, c1.id, c1.id);
+    expect(g.required(bird.id).kind).toBe('vote');
+    // Day: vote the bird out.
+    for (const p of g.alive()) g.vote(p.id, p.id === bird.id ? c1.id : bird.id);
+    const t = g.eventsFor(c1.id).find((e) => e.type === 'testament')!;
+    expect(t.text).toContain('I linked C1 and C2 on night 1.');
+  });
+
+  it('the sealed letter can only be written once', () => {
+    const { g, one, all } = setup(lineup);
+    const bird = one('mail_bird');
+    const [c1, , c3] = all('civilian');
+    g.mailBird(bird.id, { mode: 'testament', message: 'one' });
+    endNight(g, one, c3.id, c3.id);
+    for (const p of g.alive()) g.vote(p.id, 'skip');
+    expect(g.required(bird.id).mail?.testamentAvailable).toBe(false);
+    expect(() => g.mailBird(bird.id, { mode: 'testament', message: 'two' })).toThrow(/already wrote/);
+    g.mailBird(bird.id, { mode: 'none' });
+    expect(g.required(c1.id).kind).toBe('none');
+  });
+});
+
+describe('last words', () => {
+  it('a player killed at night may leave one public message during the next day', () => {
+    const { g, one, all } = setup(['murderer', 'doctor', 'civilian', 'civilian', 'civilian']);
+    const [c1, c2] = all('civilian');
+    g.nightAction(one('doctor').id, c2.id);
+    g.nightAction(one('murderer').id, c1.id);
+    expect(g.required(c1.id).kind).toBe('last_words');
+    g.lastWords(c1.id, 'It was the quiet one.');
+    expect(g.eventsFor(c2.id).find((e) => e.type === 'last_words')!.text).toContain('It was the quiet one.');
+    expect(() => g.lastWords(c1.id, 'more')).toThrow(/already/);
+    expect(() => g.lastWords(c2.id, 'hi')).toThrow(/alive/);
+  });
+
+  it('closes after the next phase and can be switched off', () => {
+    const { g, one, all } = setup(['murderer', 'doctor', 'civilian', 'civilian', 'civilian']);
+    const [c1, c2] = all('civilian');
+    g.nightAction(one('doctor').id, c2.id);
+    g.nightAction(one('murderer').id, c1.id);
+    for (const p of g.alive()) g.vote(p.id, 'skip');
+    expect(g.state.phase).toBe('night');
+    expect(g.required(c1.id).kind).toBe('none');
+    expect(() => g.lastWords(c1.id, 'late')).toThrow(/too late/);
+
+    const off = setup(['murderer', 'doctor', 'civilian', 'civilian', 'civilian'], { lastWords: false });
+    const [d1, d2] = off.all('civilian');
+    off.g.nightAction(off.one('doctor').id, d2.id);
+    off.g.nightAction(off.one('murderer').id, d1.id);
+    expect(off.g.required(d1.id).kind).toBe('none');
+  });
+});

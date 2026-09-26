@@ -33,6 +33,8 @@ interface Live {
   botTimers: Map<string, NodeJS.Timeout>;
   /** `${playerId}:${phase}${round}` -> messages said by a bot in this phase. */
   botSaid: Map<string, number>;
+  /** Dead players already woken once so they can say their last words. */
+  lastWordsWoken: Set<string>;
 }
 
 const CHATTY = new Set(['chat', 'team_chat', 'vote', 'thought', 'player_ready', 'player_joined', 'player_left']);
@@ -80,7 +82,7 @@ export class GameManager extends EventEmitter {
   }
 
   private wrap(game: Game): Live {
-    return { game, waiters: new Set(), cursors: new Map(), botTimers: new Map(), botSaid: new Map() };
+    return { game, waiters: new Set(), cursors: new Map(), botTimers: new Map(), botSaid: new Map(), lastWordsWoken: new Set() };
   }
 
   // ------------------------------------------------------------------- access
@@ -283,6 +285,8 @@ export class GameManager extends EventEmitter {
             return game.nightAction(playerId, d.target, d.thought);
           case 'vote':
             return game.vote(playerId, d.target, d.thought);
+          case 'mail':
+            return game.mailBird(playerId, d.a && d.b ? { mode: 'connect', a: d.a, b: d.b } : { mode: 'none' }, d.thought);
           case 'say':
             l.botSaid.set(key, said + 1);
             return game.say(playerId, d.message, d.thought);
@@ -306,12 +310,19 @@ export class GameManager extends EventEmitter {
     return events;
   }
 
-  private shouldWake(g: Game, w: Waiter, events: GameEvent[]): boolean {
+  private shouldWake(g: Game, w: Waiter, events: GameEvent[], l?: Live): boolean {
     if (!events.length) return false;
     if (g.state.phase === 'ended') return true;
     const me = g.player(w.playerId);
-    // Dead players can only watch: waking them for every message just burns tokens. Wake them at the end.
-    if (me && !me.alive && g.state.phase !== 'lobby') return false;
+    // Dead players can only watch: waking them for every message just burns tokens. Wake them at the end,
+    // and once right after they died so they can leave their last words.
+    if (me && !me.alive && g.state.phase !== 'lobby') {
+      if (l && !l.lastWordsWoken.has(me.id) && g.required(me.id).kind === 'last_words') {
+        l.lastWordsWoken.add(me.id);
+        return true;
+      }
+      return false;
+    }
     let messages = 0;
     for (const e of events) {
       if (!CHATTY.has(e.type)) return true; // phase changes, results, deaths, role info...
@@ -337,7 +348,7 @@ export class GameManager extends EventEmitter {
   private check(l: Live, w: Waiter): void {
     const g = l.game;
     const pending = this.takeNewEvents(g.state.id, w.playerId, false);
-    if (this.shouldWake(g, w, pending)) return this.finishWait(l, w);
+    if (this.shouldWake(g, w, pending, l)) return this.finishWait(l, w);
     const me = g.player(w.playerId);
     const deadWatcher = me && !me.alive && g.state.phase !== 'lobby';
     if (!deadWatcher && pending.some((e) => e.type === 'chat' || e.type === 'team_chat' || e.type === 'vote')) {

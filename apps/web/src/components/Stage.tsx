@@ -7,7 +7,7 @@ export interface StageLine {
   seq: number;
   actor: string;
   text: string;
-  kind: 'chat' | 'team';
+  kind: 'chat' | 'team' | 'last' | 'testament';
   /** Ventriloquist: who really said it (god view only). */
   forgedBy?: string;
   /** God view: what the speaker thought right before saying it. */
@@ -68,7 +68,7 @@ export function useStage(): StageState {
           thoughts.current.set(e.actor, { text: String(e.data.thought ?? ''), at: e.at });
           continue;
         }
-        if ((e.type !== 'chat' && e.type !== 'team_chat') || !e.actor || e.phase === 'lobby') continue;
+        if (!['chat', 'team_chat', 'last_words', 'testament'].includes(e.type) || !e.actor || e.phase === 'lobby') continue;
         const text = String(e.data.message ?? '');
         const forgedBy = forged.get(e.seq);
         const thinker = forgedBy ?? e.actor;
@@ -78,7 +78,7 @@ export function useStage(): StageState {
           seq: e.seq,
           actor: e.actor,
           text,
-          kind: e.type === 'chat' ? 'chat' : 'team',
+          kind: e.type === 'chat' ? 'chat' : e.type === 'team_chat' ? 'team' : e.type === 'last_words' ? 'last' : 'testament',
           forgedBy,
           thought: t && e.at - t.at < 5 * 60_000 ? t.text : undefined,
           thinker,
@@ -154,6 +154,8 @@ export function Stage({ line, speaking, queued, waiting = [], players, godView, 
         <div className="stage-who">
           <b style={{ color }}>{speaker?.name ?? '?'}</b>
           {line.kind === 'team' && <span className="pill">mafia, at night</span>}
+          {line.kind === 'last' && <span className="pill">🪦 last words</span>}
+          {line.kind === 'testament' && <span className="pill">🕊 sealed letter, opened after death</span>}
           {line.forgedBy && godView && <span className="pill forged-pill">🗣 forged by {real?.name ?? '?'}</span>}
         </div>
         <p className="stage-text">{line.text}</p>

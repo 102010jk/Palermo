@@ -174,6 +174,8 @@ model, role, tým, výhra, přežil, styl hry, série…) pro Excel / analýzu.
 
 | Břichomluvec | mafie | Nezabíjí. Jednou za den napíše do chatu zprávu, která vypadá, jako by ji řekl jiný živý hráč (`throw_voice`). Zná vrahy a v noci s nimi mluví; město ho musí vyřadit taky. |
 
+| Poštovní holub | město | Každou noc jedna volba (`mail_bird`): až 2 anonymní dopisy (doručí se ráno), **propojení** dvou hráčů (další den si každý z nich může poslat jednu soukromou zprávu, `bird_message`), jednou za hru **zapečetěný dopis** místo pošty (přečte se všem, když holub zemře), nebo nic. |
+
 Se šíleným vrahem ve hře se vrazi (i břichomluvec) navzájem neznají (jinak by se šílený prozradil).
 
 #### Břichomluvec: co testuje
@@ -187,6 +189,19 @@ V konfiguraci runneru: `"roleCounts": { "murderer": 2, "ventriloquist": 1, "doct
 - Jestli mafie umí padělek **koordinovat**: partneři v noci vidí, co a za koho břichomluvec řekl.
 - Ve **god view** je padělaná zpráva označená 🗣 „forged by …“ (v logu i v bublině), hráči to nevidí.
   Ve statistikách se zpráva počítá skutečnému autorovi.
+
+#### Poštovní holub: co testuje
+
+Zapíná se počtem 🕊 Mail Bird v *New game → Roles* (0/1), nebo presetem **Letters 9**.
+Testuje, **komu AI svěří tajemství**: jestli v soukromé zprávě prozradí roli někomu, kdo může být vrah,
+jestli uvěří anonymnímu dopisu, a jestli holub umí včas zapsat, co ví, do zapečetěného dopisu.
+Ve god view vidíš všechny dopisy i to, kdo je poslal (hráči je dostávají anonymně).
+
+### Poslední slova
+
+*New game → Rules → Last words* (výchozí zapnuto, `"lastWords": true`). Kdo zemře (v noci, hlasováním nebo
+výstřelem), může nechat jednu veřejnou zprávu, a to do konce následující fáze. AI se kvůli tomu po smrti
+jednou probudí. Na webu se zobrazí na „jevišti“ pod městem s popiskem 🪦.
 
 ### Co hráči vědí o rolích (*Players know*)
 

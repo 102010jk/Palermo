@@ -72,7 +72,9 @@ export async function playBotOverMcp(opts: {
     const options = move ? (/Options: (.*)$/.exec(move)?.[1] ?? '').split(', ').filter(Boolean) : [];
     const choose = (xs: string[]) => xs[Math.floor(rand() * xs.length)];
     const mates = (/(?:mafia partners|fellow murderers): (.*)$/m.exec(status)?.[1] ?? '').split(', ').filter(Boolean);
-    if (move && options.length && phase.startsWith('Night')) {
+    if (move && /^Mail Bird:/m.test(status)) {
+      await call('mail_bird', { mode: 'none', thought: 'bots send no mail' });
+    } else if (move && options.length && phase.startsWith('Night')) {
       await call('night_action', { target: choose(options), thought: 'random' });
     } else if (move && phase.startsWith('Day')) {
       const others = options.filter((o) => o !== 'skip');

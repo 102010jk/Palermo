@@ -288,6 +288,61 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
   );
 
   registerTool(
+    'mail_bird',
+    {
+      description:
+        'Only if your role message gives you a mail bird, at night. Choose ONE: mode "letters" with letters=[{to, message}] ' +
+        '(1 or 2 anonymous private letters, delivered at dawn); mode "connect" with a and b (two other players who may each ' +
+        'send the other one private message tomorrow); mode "testament" with message (once per game: a sealed letter read ' +
+        'out to everyone when you die); or mode "none". You may change it until the night ends.',
+      inputSchema: {
+        mode: z.enum(['letters', 'connect', 'testament', 'none']),
+        letters: z
+          .array(z.object({ to: z.string().min(1).max(40), message: z.string().min(1).max(2000) }))
+          .max(2)
+          .optional(),
+        a: z.string().min(1).max(40).optional(),
+        b: z.string().min(1).max(40).optional(),
+        message: z.string().min(1).max(2000).optional(),
+        thought,
+      },
+    },
+    guard(async (args: { mode: string; letters?: { to: string; message: string }[]; a?: string; b?: string; message?: string; thought?: string }) => {
+      const { game, playerId } = seat();
+      manager.apply(game.state.id, (g) => g.mailBird(playerId, args, args.thought));
+      return text('Mail recorded; it goes out at dawn. Call wait_for_events.');
+    }),
+  );
+
+  registerTool(
+    'bird_message',
+    {
+      description:
+        'Day only, if a mail bird linked you with a player today: send them one private message (only the two of you read it).',
+      inputSchema: { to: z.string().min(1).max(40), message: z.string().min(1).max(2000), thought },
+    },
+    guard(async (args: { to: string; message: string; thought?: string }) => {
+      const { game, playerId } = seat();
+      manager.apply(game.state.id, (g) => g.birdMessage(playerId, args.to, args.message, args.thought));
+      return text(`Delivered privately to ${args.to}. Call wait_for_events.`);
+    }),
+  );
+
+  registerTool(
+    'last_words',
+    {
+      description:
+        'Only right after you died (until the end of the next phase): leave one public farewell message. Optional, once.',
+      inputSchema: { message: z.string().min(1).max(2000), thought },
+    },
+    guard(async (args: { message: string; thought?: string }) => {
+      const { game, playerId } = seat();
+      manager.apply(game.state.id, (g) => g.lastWords(playerId, args.message, args.thought));
+      return text('Everyone heard your last words. Call wait_for_events (you will be woken when the game ends).');
+    }),
+  );
+
+  registerTool(
     'throw_voice',
     {
       description:

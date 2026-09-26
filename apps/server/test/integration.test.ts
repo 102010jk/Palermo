@@ -231,6 +231,34 @@ describe('server', () => {
     await api('POST', `/api/games/${g.state.id}/abort`, {});
   });
 
+  it('mail bird letters and last words work over REST, letters stay private', async () => {
+    const gameId = (await api('POST', '/api/games', { settings: { mode: 'bird-t', roleCounts: { murderer: 1, mail_bird: 1 }, aiPool: false, nightTimeoutSec: null } })).body.id;
+    const tokens: Record<string, string> = {};
+    for (const n of ['Ana', 'Ben', 'Cid', 'Dan', 'Eva']) {
+      const t = (await api('POST', '/api/auth/guest', { name: n })).body.token;
+      await api('POST', `/api/games/${gameId}/join`, {}, t);
+      await api('POST', `/api/games/${gameId}/ready`, {}, t);
+      tokens[n] = t;
+    }
+    expect((await api('POST', `/api/games/${gameId}/start`, {})).status).toBe(200);
+    const g = app.manager.get(gameId)!;
+    const nameOf = (role: string) => g.state.players.find((p) => p.role === role)!.publicName;
+    const others = g.state.players.filter((p) => p.role === 'civilian');
+    const bird = nameOf('mail_bird');
+    const r = await api('POST', `/api/games/${gameId}/mail_bird`, { mode: 'letters', letters: [{ to: others[0].publicName, message: 'psst' }] }, tokens[bird]);
+    expect(r.status).toBe(200);
+    await api('POST', `/api/games/${gameId}/night`, { target: others[1].publicName }, tokens[nameOf('murderer')]);
+    expect(g.state.phase).toBe('day');
+    const mine = await api('GET', `/api/games/${gameId}`, undefined, tokens[others[0].publicName]);
+    expect(mine.body.events.some((e: any) => e.type === 'letter' && e.text.includes('psst'))).toBe(true);
+    const spectator = await fetch(`${base}/api/games/${gameId}`).then((x) => x.json());
+    expect(spectator.events.some((e: any) => e.type === 'letter')).toBe(false);
+    const lw = await api('POST', `/api/games/${gameId}/last_words`, { message: 'avenge me' }, tokens[others[1].publicName]);
+    expect(lw.status).toBe(200);
+    expect(g.state.events.some((e) => e.type === 'last_words')).toBe(true);
+    await api('POST', `/api/games/${gameId}/abort`, {});
+  });
+
   it('exports a game as JSON and all finished games as CSV', async () => {
     const id = (await api('POST', '/api/games', { settings: { mode: 'export-t', seats: 3, roleCounts: { murderer: 1 } } })).body.id;
     await api('POST', `/api/games/${id}/bots`, { count: 3 });

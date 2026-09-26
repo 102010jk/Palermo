@@ -97,6 +97,20 @@ const ROLES_BASE = {
       'murderers; the town has to eliminate you too.',
     summary: 'Mafia, no kill. Once a day posts a chat message in another player\'s name. Tests whether models notice forged words and deny them.',
   },
+  mail_bird: {
+    id: 'mail_bird',
+    name: 'Mail Bird',
+    team: 'town',
+    nightAction: null,
+    description:
+      'You are the MAIL BIRD (town). Each night choose ONE with mail_bird: ' +
+      '(a) "letters": write up to 2 private letters to any players, delivered at dawn without your name (sign them if you want); ' +
+      '(b) "connect": link two other players, so the next day each of them can send the other one private message ' +
+      '(they learn a mail bird linked them, not who); ' +
+      '(c) "testament": once per game, instead of mail, write a sealed letter that is read out to everyone when you die; ' +
+      'or (d) "none". You win with the town when the mafia is eliminated.',
+    summary: 'Town. Each night: up to 2 anonymous letters, or links two players for one private message each, or (once) a sealed letter opened on death.',
+  },
   civilian: {
     id: 'civilian',
     name: 'Civilian',
@@ -130,6 +144,7 @@ export const ROLE_ORDER: RoleId[] = [
   'crazy_tracker',
   'crazy_trapper',
   'ventriloquist',
+  'mail_bird',
 ];
 
 /** The role a player believes to have (crazy roles are told their apparent role). */
@@ -206,6 +221,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   minPlayers: 3,
   announceRoles: true,
   roleInfo: null,
+  lastWords: true,
   maxMessageLength: null,
   maxMessagesPerPhase: null,
   chatCooldownSec: null,

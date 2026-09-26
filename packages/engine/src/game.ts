@@ -1,6 +1,7 @@
 import { DEFAULT_SETTINGS, ROLES, ROLE_ORDER, apparentRole, isCrazy, roleInfoOf, rolesFor, teamOf } from './roles.ts';
 import { pick, shuffle } from './rng.ts';
 import type {
+  MailChoice,
   EventType,
   GameEvent,
   GameSettings,
@@ -442,6 +443,8 @@ export class Game {
     s.voteDeadlineStartedAt = null;
     s.speechQueue = [];
     s.floorUntil = null;
+    s.phaseSerial = (s.phaseSerial ?? 0) + 1;
+    if (phase === 'night') s.mailChoices = {};
     s.nightPlanned = false;
     s.dayClosing = false;
     const timeout = phase === 'night' ? this.settings.nightTimeoutSec : phase === 'day' ? this.settings.dayTimeoutSec : null;
@@ -673,8 +676,10 @@ export class Game {
   }
 
   nightComplete(): boolean {
-    return this.nightActors().every(
-      (p) => this.state.nightChoices[p.id] || (this.believedKind(p) !== 'kill' && this.validNightTargets(p).length === 0),
+    return (
+      this.nightActors().every(
+        (p) => this.state.nightChoices[p.id] || (this.believedKind(p) !== 'kill' && this.validNightTargets(p).length === 0),
+      ) && this.mailBirds().every((b) => this.state.mailChoices?.[b.id])
     );
   }
 
@@ -823,6 +828,9 @@ export class Game {
       );
     }
 
+    // 5. The mail bird's letters and links arrive at dawn.
+    out.push(...this.deliverMail());
+
     const revealRole = (p: Player) => (this.settings.revealRoleOnDeath ? ` ${p.publicName} was a ${ROLES[p.role!].name}.` : '');
     const names = victims.map((v) => v.publicName);
     out.push(
@@ -839,6 +847,7 @@ export class Game {
         },
       ),
     );
+    out.push(...this.afterDeath(victims));
     // Hidden details (who went where) for the god view and the night animation.
     out.push(
       this.emit('notice', { scope: 'admin' }, 'Night summary (admin).', {
@@ -857,6 +866,213 @@ export class Game {
     const win = this.checkWin();
     if (win) out.push(...this.endGame(win.winner, win.reason));
     else out.push(...this.enterPhase('day'));
+    return out;
+  }
+
+  // ---------------------------------------------------------------- mail bird
+
+  isMailBird(p: Player): boolean {
+    return p.role === 'mail_bird';
+  }
+
+  private mailBirds(): Player[] {
+    return this.alive().filter((p) => this.isMailBird(p));
+  }
+
+  /** Mail Bird, at night: letters, a link between two players, the sealed letter, or nothing. */
+  mailBird(
+    playerId: string,
+    input: { mode: string; letters?: { to: string; message: string }[]; a?: string; b?: string; message?: string },
+    thought?: string,
+  ): GameEvent[] {
+    const s = this.state;
+    const p = this.mustPlayer(playerId);
+    if (s.phase !== 'night') throw new GameError('The mail bird only flies at night.');
+    if (!p.alive) throw new GameError('You are dead.');
+    if (!this.isMailBird(p)) throw new GameError('You have no mail bird.');
+    if (s.nightPlanned) throw new GameError('The night is already under way: actions are locked until dawn.');
+    const text = (m: unknown) => {
+      const t = String(m ?? '').trim().slice(0, 2000);
+      if (!t) throw new GameError('The letter must not be empty.');
+      const max = this.settings.maxMessageLength;
+      if (max && t.length > max) throw new GameError(`Letter too long: ${t.length} characters, the limit is ${max}.`);
+      return t;
+    };
+    const living = (ref: unknown) => {
+      const t = this.resolveTarget(String(ref ?? ''));
+      if (!t.alive) throw new GameError(`${t.publicName} is dead.`);
+      return t;
+    };
+    let choice: MailChoice;
+    let summary: string;
+    switch (input.mode) {
+      case 'letters': {
+        const letters = (input.letters ?? []).filter((l) => l && (l.to || l.message));
+        if (!letters.length || letters.length > 2) throw new GameError('Write one or two letters: [{to, message}].');
+        const parsed = letters.map((l) => ({ to: living(l.to), message: text(l.message) }));
+        if (parsed.some((l) => l.to.id === p.id)) throw new GameError('Send your letters to other players.');
+        choice = { mode: 'letters', letters: parsed.map((l) => ({ to: l.to.id, message: l.message })) };
+        summary = `will send ${parsed.length === 1 ? 'a letter' : 'letters'} to ${parsed.map((l) => l.to.publicName).join(' and ')}`;
+        break;
+      }
+      case 'connect': {
+        const a = living(input.a);
+        const b = living(input.b);
+        if (a.id === b.id) throw new GameError('Link two different players.');
+        if (a.id === p.id || b.id === p.id) throw new GameError('Link two other players (write letters to talk yourself).');
+        choice = { mode: 'connect', a: a.id, b: b.id };
+        summary = `will link ${a.publicName} and ${b.publicName}`;
+        break;
+      }
+      case 'testament': {
+        if (s.testamentWritten?.includes(p.id)) throw new GameError('You already wrote your sealed letter.');
+        choice = { mode: 'testament', message: text(input.message) };
+        summary = 'will write the sealed letter';
+        break;
+      }
+      case 'none':
+        choice = { mode: 'none' };
+        summary = 'stays home with the bird tonight';
+        break;
+      default:
+        throw new GameError('mode must be "letters", "connect", "testament" or "none".');
+    }
+    const changed = !!s.mailChoices?.[p.id];
+    s.mailChoices = { ...(s.mailChoices ?? {}), [p.id]: choice };
+    const out = this.emitThought(p, thought, 'mail bird');
+    out.push(
+      this.emit('night_action', { scope: 'players', ids: [p.id] }, `${p.publicName} ${changed ? 'changed their mind and' : ''} ${summary}.`.replace('  ', ' '), {
+        kind: 'mail',
+        mode: choice.mode,
+      }, p.id),
+    );
+    if (this.nightComplete()) out.push(...(this.visual() ? this.planNight() : this.resolveNight()));
+    return out;
+  }
+
+  /** Dawn: deliver the mail chosen tonight. */
+  private deliverMail(): GameEvent[] {
+    const s = this.state;
+    const out: GameEvent[] = [];
+    for (const [birdId, c] of Object.entries(s.mailChoices ?? {})) {
+      const bird = this.player(birdId)!;
+      out.push(this.emit('notice', { scope: 'admin' }, `Mail bird ${bird.publicName}: ${c.mode}.`, { kind: 'mail', by: birdId, choice: c }));
+      if (c.mode === 'letters') {
+        for (const l of c.letters) {
+          out.push(
+            this.emit('letter', { scope: 'players', ids: [l.to] }, `A mail bird brought you a letter: "${l.message}"`, { message: l.message, to: l.to, from: 'mail_bird' }),
+          );
+        }
+      } else if (c.mode === 'connect') {
+        s.mailLinks = [...(s.mailLinks ?? []), { a: c.a, b: c.b, round: s.round, used: [] }];
+        for (const [x, y] of [
+          [c.a, c.b],
+          [c.b, c.a],
+        ]) {
+          out.push(
+            this.emit(
+              'letter',
+              { scope: 'players', ids: [x] },
+              `A mail bird linked you with ${this.player(y)!.publicName}: today each of you can send the other one private message (bird_message).`,
+              { link: true, with: y },
+            ),
+          );
+        }
+      } else if (c.mode === 'testament') {
+        s.testaments = { ...(s.testaments ?? {}), [birdId]: c.message };
+        s.testamentWritten = [...(s.testamentWritten ?? []), birdId];
+        out.push(
+          this.emit('letter', { scope: 'players', ids: [birdId] }, 'Your sealed letter is written. It will be read out to everyone when you die.', {
+            testament: true,
+          }),
+        );
+      }
+    }
+    s.mailChoices = {};
+    return out;
+  }
+
+  /** Players whose Mail Bird link is open today and not used yet by `p`. */
+  private openLinks(p: Player): Player[] {
+    const s = this.state;
+    if (s.phase !== 'day') return [];
+    return (s.mailLinks ?? [])
+      .filter((l) => l.round === s.round && (l.a === p.id || l.b === p.id) && !l.used.includes(p.id))
+      .map((l) => this.player(l.a === p.id ? l.b : l.a)!)
+      .filter((t) => t.alive);
+  }
+
+  /** Day: one private message over a Mail Bird link. */
+  birdMessage(playerId: string, toRef: string, message: string, thought?: string): GameEvent[] {
+    const s = this.state;
+    const p = this.mustPlayer(playerId);
+    if (s.phase !== 'day') throw new GameError('Mail bird links are open during the day.');
+    if (!p.alive) throw new GameError('You are dead.');
+    const t = this.resolveTarget(toRef);
+    const link = (s.mailLinks ?? []).find(
+      (l) => l.round === s.round && ((l.a === p.id && l.b === t.id) || (l.b === p.id && l.a === t.id)),
+    );
+    if (!link) throw new GameError(`No mail bird links you with ${t.publicName} today.`);
+    if (link.used.includes(p.id)) throw new GameError(`You already sent your one message to ${t.publicName}.`);
+    if (!t.alive) throw new GameError(`${t.publicName} is dead.`);
+    const text = message.trim().slice(0, 2000);
+    if (!text) throw new GameError('Message must not be empty.');
+    const max = this.settings.maxMessageLength;
+    if (max && text.length > max) throw new GameError(`Message too long: ${text.length} characters, the limit is ${max}.`);
+    link.used.push(p.id);
+    const out = this.emitThought(p, thought, `private message to ${t.publicName}`);
+    out.push(
+      this.emit('letter', { scope: 'players', ids: [p.id, t.id] }, `[mail bird] ${p.publicName} → ${t.publicName}: ${text}`, { message: text, to: t.id, link: true }, p.id),
+    );
+    return out;
+  }
+
+  /** Someone died: their sealed letter (if any) is read out, and last words open. */
+  private afterDeath(dead: Player[]): GameEvent[] {
+    const s = this.state;
+    const out: GameEvent[] = [];
+    for (const d of dead) {
+      if (this.settings.lastWords) s.lastWordsUntil = { ...(s.lastWordsUntil ?? {}), [d.id]: (s.phaseSerial ?? 0) + 1 };
+      const letter = s.testaments?.[d.id];
+      if (letter) {
+        delete s.testaments![d.id];
+        out.push(
+          this.emit('testament', { scope: 'public' }, `A sealed letter left by ${d.publicName} is opened: "${letter}"`, { message: letter }, d.id),
+        );
+      }
+    }
+    return out;
+  }
+
+  private canSayLastWords(p: Player): boolean {
+    const s = this.state;
+    const until = s.lastWordsUntil?.[p.id];
+    return (
+      !!this.settings.lastWords &&
+      !p.alive &&
+      s.phase !== 'ended' &&
+      until !== undefined &&
+      (s.phaseSerial ?? 0) <= until &&
+      !(s.lastWordsSaid ?? []).includes(p.id)
+    );
+  }
+
+  /** A dead player's one public farewell message. */
+  lastWords(playerId: string, message: string, thought?: string): GameEvent[] {
+    const s = this.state;
+    const p = this.mustPlayer(playerId);
+    if (p.alive) throw new GameError('You are alive: use say.');
+    if (!this.settings.lastWords) throw new GameError('This game has no last words.');
+    if ((s.lastWordsSaid ?? []).includes(p.id)) throw new GameError('You already said your last words.');
+    if (!this.canSayLastWords(p)) throw new GameError('It is too late for last words.');
+    const text = message.trim().slice(0, 2000);
+    if (!text) throw new GameError('Message must not be empty.');
+    const max = this.settings.maxMessageLength;
+    if (max && text.length > max) throw new GameError(`Message too long: ${text.length} characters, the limit is ${max}.`);
+    s.lastWordsSaid = [...(s.lastWordsSaid ?? []), p.id];
+    const out = this.emitThought(p, thought, 'last words');
+    if (this.visual() && s.phase === 'day') s.floorUntil = Math.max(s.floorUntil ?? 0, this.now()) + readingTimeMs(text);
+    out.push(this.emit('last_words', { scope: 'public' }, `${p.publicName}'s last words: "${text}"`, { message: text }, p.id));
     return out;
   }
 
@@ -923,6 +1139,7 @@ export class Game {
         role: this.settings.revealRoleOnDeath ? t.role : undefined,
       }, p.id),
     );
+    out.push(...this.afterDeath([t]));
     const win = this.checkWin();
     if (win) return [...out, ...this.endGame(win.winner, win.reason)];
     if (Object.keys(s.votes).length >= this.alive().length) out.push(...this.everyoneVoted());
@@ -1070,6 +1287,7 @@ export class Game {
       }),
     );
     out.push(this.emit('notice', { scope: 'admin' }, 'Day votes (admin).', { kind: 'day_votes', votes: { ...s.votes }, eliminated }));
+    if (eliminated) out.push(...this.afterDeath([this.player(eliminated)!]));
     const win = this.checkWin();
     if (win) out.push(...this.endGame(win.winner, win.reason));
     else out.push(...this.enterPhase('night'));
@@ -1127,7 +1345,35 @@ export class Game {
         : { kind: 'ready', done: false, hint: 'Mark yourself ready.' };
     }
     if (s.phase === 'ended') return { kind: 'none', done: true, hint: 'The game is over. Write your reflection.' };
-    if (!p.alive) return { kind: 'none', done: true, hint: 'You are dead. You can only watch.' };
+    if (!p.alive) {
+      if (this.canSayLastWords(p)) {
+        return {
+          kind: 'last_words',
+          done: false,
+          hint: 'You died. You may leave one public farewell message with last_words (optional, only until the end of the next phase). Then just watch.',
+        };
+      }
+      return { kind: 'none', done: true, hint: 'You are dead. You can only watch.' };
+    }
+    if (s.phase === 'night' && this.isMailBird(p)) {
+      if (s.nightPlanned) return { kind: 'none', done: true, hint: 'The night is under way: actions are locked. Wait for dawn.' };
+      const chosen = s.mailChoices?.[p.id]?.mode ?? null;
+      const testamentAvailable = !s.testamentWritten?.includes(p.id);
+      return {
+        kind: 'mail',
+        options: this.alive()
+          .filter((t) => t.id !== p.id)
+          .map((t) => t.publicName),
+        mail: { testamentAvailable, chosen },
+        done: !!chosen,
+        hint:
+          (chosen ? `Tonight's mail is set (${chosen}); you may change it until the night ends. ` : '') +
+          'Choose ONE with mail_bird: mode "letters" (up to 2 anonymous letters, delivered at dawn), ' +
+          'mode "connect" (players a and b may each send the other one private message tomorrow)' +
+          (testamentAvailable ? ', mode "testament" (once per game: a sealed letter read out when you die)' : '') +
+          ', or mode "none".',
+      };
+    }
     if (s.phase === 'night') {
       const kind = this.believedKind(p);
       if (!kind) return { kind: 'none', done: true, hint: 'You have no night action. Wait for the day.' };
@@ -1173,17 +1419,20 @@ export class Game {
       : canThrow
         ? { dayAction: { kind: 'throw_voice' as const, options: shootOptions } }
         : {};
+    const links = this.openLinks(p).map((t) => t.publicName);
     return {
       kind: 'vote',
       options,
       done: !!v,
       ...dayAction,
+      ...(links.length ? { links } : {}),
       hint:
         (v
           ? `You voted for ${v === SKIP ? SKIP : this.player(v)!.publicName}. You may change your vote until everyone has voted.`
           : 'Discuss, then vote. The day ends when every living player has voted.') +
         (canShoot ? ' You still have your one bullet: shoot kills a player at once and reveals you as the Gunman.' : '') +
-        (canThrow ? ' Once today you can throw your voice: throw_voice makes a message appear in another player\'s name.' : ''),
+        (canThrow ? ' Once today you can throw your voice: throw_voice makes a message appear in another player\'s name.' : '') +
+        (links.length ? ` A mail bird linked you with ${links.join(', ')}: you may send each one private message with bird_message.` : ''),
     };
   }
 

@@ -5,6 +5,7 @@ export type BotDecision =
   | { type: 'night_action'; target: string; thought: string }
   | { type: 'say'; message: string; thought: string }
   | { type: 'vote'; target: string; thought: string }
+  | { type: 'mail'; a?: string; b?: string; thought: string }
   | null;
 
 const LINES = [
@@ -26,6 +27,12 @@ export function botDecide(view: PlayerView, saidThisPhase: number, rand: () => n
   if (req.kind === 'night_action' && !req.done && req.options?.length) {
     const real = req.options.filter((o) => o !== 'pass');
     return { type: 'night_action', target: real.length ? choose(real) : 'pass', thought: 'Scripted bot: random target.' };
+  }
+  if (req.kind === 'mail' && !req.done && req.options?.length) {
+    const a = choose(req.options);
+    const rest = req.options.filter((o) => o !== a);
+    if (rest.length) return { type: 'mail', a, b: choose(rest), thought: 'Scripted bot: link two random players.' };
+    return { type: 'mail', thought: 'Scripted bot: nobody to link.' };
   }
   if (req.kind === 'vote' && view.you?.alive) {
     const others = (req.options ?? []).filter((o) => o !== 'skip');

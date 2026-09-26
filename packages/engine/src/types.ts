@@ -9,7 +9,8 @@ export type RoleId =
   | 'crazy_doctor'
   | 'crazy_tracker'
   | 'crazy_trapper'
-  | 'ventriloquist';
+  | 'ventriloquist'
+  | 'mail_bird';
 export type Team = 'town' | 'mafia';
 export type Phase = 'lobby' | 'night' | 'day' | 'ended';
 export type PlayerKind = 'human' | 'ai' | 'bot';
@@ -18,6 +19,13 @@ export type Winner = Team | 'draw';
 /** What a night role does when it acts. New roles plug in by adding a kind here and handling it in resolveNight. */
 export type NightActionKind = 'kill' | 'protect' | 'track' | 'trap';
 /** Actions used during the day (the gunman's single shot). */
+/** The Mail Bird's choice for one night. Player references are public names (ids once stored). */
+export type MailChoice =
+  | { mode: 'letters'; letters: { to: string; message: string }[] }
+  | { mode: 'connect'; a: string; b: string }
+  | { mode: 'testament'; message: string }
+  | { mode: 'none' };
+
 export type RoleInfo = 'exact' | 'possible' | 'hidden';
 
 export type DayActionKind = 'shoot' | 'throw_voice';
@@ -74,6 +82,8 @@ export interface GameSettings {
    * null = from announceRoles (true -> exact, false -> possible).
    */
   roleInfo: RoleInfo | null;
+  /** Players who die may leave one public message (until the end of the next phase). */
+  lastWords: boolean;
   /** Chat limits (null = off). Max characters per message. */
   maxMessageLength: number | null;
   /** Max chat messages per player per phase (a day, or a night for the murderers' private chat). */
@@ -140,6 +150,9 @@ export type EventType =
   | 'doctor_result'
   | 'trap_result'
   | 'shot'
+  | 'letter'
+  | 'testament'
+  | 'last_words'
   | 'thought'
   | 'notice'
   | 'game_ended';
@@ -183,6 +196,19 @@ export interface GameState {
   voteDeadlineStartedAt?: number | null;
   /** Visual games: chat messages waiting to be spoken, and until when the current one is on screen. */
   speechQueue?: { playerId: string; text: string; forgedBy?: string }[];
+  /** Mail Bird: tonight's choices (birdId -> choice with player ids). */
+  mailChoices?: Record<string, MailChoice>;
+  /** Mail Bird links: on day `round`, a and b may each send the other one private message. */
+  mailLinks?: { a: string; b: string; round: number; used: string[] }[];
+  /** Mail Bird: sealed letters (birdId -> text), opened when the bird dies. */
+  testaments?: Record<string, string>;
+  /** Mail Bird: birds who already wrote their sealed letter (once per game). */
+  testamentWritten?: string[];
+  /** Counts phase changes (last words stay open until the end of the phase after death). */
+  phaseSerial?: number;
+  /** Dead playerId -> last phaseSerial in which they may still say their last words. */
+  lastWordsUntil?: Record<string, number>;
+  lastWordsSaid?: string[];
   /** ventriloquistId -> round in which the voice was last thrown (once per day). */
   voiceUsed?: Record<string, number>;
   floorUntil?: number | null;
@@ -220,12 +246,16 @@ export interface GameState {
 
 /** What a specific player is expected (or allowed) to do right now. */
 export interface RequiredAction {
-  kind: 'ready' | 'night_action' | 'vote' | 'none';
+  kind: 'ready' | 'night_action' | 'mail' | 'last_words' | 'vote' | 'none';
   actionKind?: NightActionKind;
   /** Extra action available right now (the gunman's shot during the day). */
   dayAction?: { kind: DayActionKind; options: string[] };
   /** Valid targets as public names. */
   options?: string[];
+  /** Mail Bird at night: whether the sealed letter can still be written. */
+  mail?: { testamentAvailable: boolean; chosen: MailChoice['mode'] | null };
+  /** Mail Bird link today: players you may still send one private message (bird_message). */
+  links?: string[];
   done: boolean;
   hint: string;
 }

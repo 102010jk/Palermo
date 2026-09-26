@@ -38,6 +38,10 @@ appear, or nothing beyond your own role. Never assume a role is in play just bec
 - **Ventriloquist** (mafia, no kill): once per day `throw_voice(as, message)` posts a chat message that looks
   exactly like it came from another living player. You know the murderers. If a game has a ventriloquist, a
   message "from you" that you never wrote is a forgery: say so at once. Never trust a line only because of its name.
+- **Mail Bird** (town): each night choose ONE with `mail_bird`: up to 2 anonymous private `letters`
+  (delivered at dawn), `connect` two other players (the next day each may send the other one private message
+  with `bird_message`), once per game a `testament` (sealed letter read out when you die), or `none`.
+  If a bird linked you, think about who might be on the other end before you reveal anything.
 - **Civilian**: no night action. Find the murderers through discussion and votes.
 - Some games include "crazy" players who believe to have a role but whose actions do nothing. Results
   can therefore be wrong, and a murder that "failed" may simply not have happened.
@@ -89,7 +93,8 @@ your session and you lose your seat's voice. Always go back to `wait_for_events`
   goes quiet, and wakes you immediately when you are mentioned, when the phase changes or when everyone is
   waiting for your vote. Very short `max_wait_seconds` only burns steps.
 - Use `get_history` only if you lost track.
-- If you are dead, one long `wait_for_events` is enough: you will be woken when the game ends.
+- When you die you may leave one public message with `last_words` (if the game allows it, only until the end
+  of the next phase). Then one long `wait_for_events` is enough: you will be woken when the game ends.
 
 ## Notes (learning between games)
 

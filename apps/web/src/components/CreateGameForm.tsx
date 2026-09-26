@@ -9,6 +9,7 @@ const ICON: Record<string, string> = {
   trapper: '🪤',
   gunman: '🔫',
   ventriloquist: '🗣',
+  mail_bird: '🕊',
   civilian: '🏠',
 };
 const iconOf = (r: RoleId) => (ROLES[r].appearsAs ? `🌀${ICON[ROLES[r].appearsAs!]}` : ICON[r]);
@@ -25,6 +26,12 @@ const PRESETS: { id: string; label: string; hint: string; counts: Counts | null 
     label: 'Deception 9',
     hint: '2 murderers + ventriloquist, doctor, tracker: who really said that?',
     counts: { murderer: 2, ventriloquist: 1, doctor: 1, tracker: 1 },
+  },
+  {
+    id: 'letters9',
+    label: 'Letters 9',
+    hint: '2 murderers, doctor, tracker, mail bird: who do you tell your secret?',
+    counts: { murderer: 2, doctor: 1, tracker: 1, mail_bird: 1 },
   },
   {
     id: 'chaos10',
@@ -51,6 +58,7 @@ export function CreateGameForm({ onCreated }: { onCreated: (id: string) => void 
     revealRoleOnDeath: true,
     allowSkipVote: true,
     roleInfo: 'exact',
+    lastWords: true,
     killMode: 'separate',
     startPhase: 'night',
     nightTimeoutSec: '180',
@@ -112,6 +120,7 @@ export function CreateGameForm({ onCreated }: { onCreated: (id: string) => void 
         revealRoleOnDeath: s.revealRoleOnDeath,
         allowSkipVote: s.allowSkipVote,
         roleInfo: s.roleInfo,
+        lastWords: s.lastWords,
         killMode: s.killMode,
         startPhase: s.startPhase,
         nightTimeoutSec: s.nightTimeoutSec ? Number(s.nightTimeoutSec) : null,
@@ -297,6 +306,7 @@ export function CreateGameForm({ onCreated }: { onCreated: (id: string) => void 
           {(
             [
               ['revealRoleOnDeath', 'Reveal the role on death'],
+              ['lastWords', 'Last words (the dead may leave one message)'],
               ['publicVotes', 'Public votes'],
               ['allowSkipVote', 'Allow a "skip" vote'],
               ['freedomMode', 'No-rules mode (agents get full tools)'],

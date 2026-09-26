@@ -316,6 +316,28 @@ export function createPalermo(cfg: AppConfig): PalermoApp {
     playerAction((g, pid, b) => manager.apply(g.state.id, (x) => x.shoot(pid, String(b.target ?? '')))),
   );
   app.post(
+    '/api/games/:id/mail_bird',
+    playerAction((g, pid, b) =>
+      manager.apply(g.state.id, (x) =>
+        x.mailBird(pid, {
+          mode: String(b.mode ?? ''),
+          letters: Array.isArray(b.letters) ? (b.letters as { to: string; message: string }[]) : undefined,
+          a: b.a == null ? undefined : String(b.a),
+          b: b.b == null ? undefined : String(b.b),
+          message: b.message == null ? undefined : String(b.message),
+        }),
+      ),
+    ),
+  );
+  app.post(
+    '/api/games/:id/bird_message',
+    playerAction((g, pid, b) => manager.apply(g.state.id, (x) => x.birdMessage(pid, String(b.to ?? ''), String(b.message ?? '')))),
+  );
+  app.post(
+    '/api/games/:id/last_words',
+    playerAction((g, pid, b) => manager.apply(g.state.id, (x) => x.lastWords(pid, String(b.message ?? '')))),
+  );
+  app.post(
     '/api/games/:id/throw_voice',
     playerAction((g, pid, b) => manager.apply(g.state.id, (x) => x.throwVoice(pid, String(b.as ?? ''), String(b.message ?? '')))),
   );
@@ -558,7 +580,7 @@ export class HttpError extends Error {
   }
 }
 
-const BOOL_KEYS = ['revealRoleOnDeath', 'publicVotes', 'allowSkipVote', 'freedomMode', 'doctorNoRepeat', 'doctorLearnsSave', 'autoStart', 'announceRoles', 'aiPool'] as const;
+const BOOL_KEYS = ['revealRoleOnDeath', 'publicVotes', 'allowSkipVote', 'freedomMode', 'doctorNoRepeat', 'doctorLearnsSave', 'autoStart', 'announceRoles', 'aiPool', 'lastWords'] as const;
 const NUM_OR_NULL = ['nightTimeoutSec', 'dayTimeoutSec', 'maxRounds', 'maxMessageLength', 'maxMessagesPerPhase', 'chatCooldownSec', 'voteDeadlineSec'] as const;
 
 /** Accept only known settings with sane types from the admin UI / runner. */

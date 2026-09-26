@@ -206,13 +206,13 @@ export function GamePage({ gameId }: { gameId: string }) {
   // Replays: the stage shows the latest line said so far.
   const replayLine = useMemo(() => {
     if (!replay) return null;
-    const e = [...shownEvents].reverse().find((x) => (x.type === 'chat' || x.type === 'team_chat') && x.actor && x.phase !== 'lobby');
+    const e = [...shownEvents].reverse().find((x) => ['chat', 'team_chat', 'last_words', 'testament'].includes(x.type) && x.actor && x.phase !== 'lobby');
     if (!e) return null;
     const line: StageLine & { start: number } = {
       seq: e.seq,
       actor: e.actor!,
       text: String(e.data.message ?? ''),
-      kind: e.type === 'chat' ? 'chat' : 'team',
+      kind: e.type === 'chat' ? 'chat' : e.type === 'team_chat' ? 'team' : e.type === 'last_words' ? 'last' : 'testament',
       ms: 1,
       start: 0,
     };
@@ -224,7 +224,7 @@ export function GamePage({ gameId }: { gameId: string }) {
     const out: Record<string, Bubble> = {};
     for (const [id, b] of Object.entries(bubbles)) if (b.kind === 'thought') out[id] = b;
     const c = stage.current;
-    if (c && stage.speaking) out[c.actor] = { text: c.text, kind: c.kind, at: c.start, forgedBy: c.forgedBy };
+    if (c && stage.speaking) out[c.actor] = { text: c.text, kind: c.kind === 'team' ? 'team' : 'chat', at: c.start, forgedBy: c.forgedBy };
     return out;
   }, [replayState, shownBubbles, bubbles, stage.current, stage.speaking]);
 
@@ -590,6 +590,16 @@ export function GamePage({ gameId }: { gameId: string }) {
             </section>
           )}
 
+          {me && me.alive && req.kind === 'mail' && (
+            <MailCard options={req.options ?? []} testament={!!req.mail?.testamentAvailable} chosen={req.mail?.chosen ?? null} onSend={(body) => act('mail_bird', body)} />
+          )}
+
+          {me && me.alive && !!req.links?.length && (
+            <LinkCard links={req.links} onSend={(to, message) => act('bird_message', { to, message })} />
+          )}
+
+          {me && !me.alive && req.kind === 'last_words' && <LastWordsCard onSend={(message) => act('last_words', { message })} />}
+
           {me && me.alive && req.dayAction?.kind === 'throw_voice' && (
             <VoiceCard options={req.dayAction.options} onSend={(as, message) => act('throw_voice', { as, message })} />
           )}
@@ -684,6 +694,120 @@ export function GamePage({ gameId }: { gameId: string }) {
   );
 }
 
+/** Mail Bird's night: letters, a link between two players, the sealed letter, or nothing. */
+function MailCard({ options, testament, chosen, onSend }: { options: string[]; testament: boolean; chosen: string | null; onSend: (body: unknown) => void }) {
+  const [mode, setMode] = useState<'letters' | 'connect' | 'testament' | 'none'>('letters');
+  const [letters, setLetters] = useState([
+    { to: options[0] ?? '', message: '' },
+    { to: options[1] ?? options[0] ?? '', message: '' },
+  ]);
+  const [a, setA] = useState(options[0] ?? '');
+  const [b, setB] = useState(options[1] ?? '');
+  const [message, setMessage] = useState('');
+  const pickPlayer = (value: string, set: (v: string) => void) => (
+    <select value={value} onChange={(e) => set(e.target.value)}>
+      {options.map((o) => (
+        <option key={o} value={o}>
+          {o}
+        </option>
+      ))}
+    </select>
+  );
+  const filled = letters.filter((l) => l.message.trim());
+  const send = () => {
+    if (mode === 'letters') onSend({ mode, letters: filled.map((l) => ({ to: l.to, message: l.message.trim() })) });
+    else if (mode === 'connect') onSend({ mode, a, b });
+    else if (mode === 'testament') onSend({ mode, message: message.trim() });
+    else onSend({ mode });
+  };
+  const ready = mode === 'letters' ? filled.length > 0 : mode === 'connect' ? !!a && !!b && a !== b : mode === 'testament' ? !!message.trim() : true;
+  return (
+    <section className="card action mail-card">
+      <h3>🕊 Mail bird</h3>
+      <p className="small">One choice per night.{chosen ? ` Chosen tonight: ${chosen} (you can change it).` : ''}</p>
+      <div className="row wrap mail-modes">
+        {(['letters', 'connect', ...(testament ? ['testament'] : []), 'none'] as const).map((m) => (
+          <button key={m} className={mode === m ? 'selected' : ''} onClick={() => setMode(m as typeof mode)}>
+            {{ letters: 'Letters (up to 2)', connect: 'Link two players', testament: 'Sealed letter', none: 'Nothing' }[m]}
+          </button>
+        ))}
+      </div>
+      {mode === 'letters' &&
+        letters.map((l, i) => (
+          <div key={i} className="row wrap">
+            {pickPlayer(l.to, (v) => setLetters((xs) => xs.map((x, j) => (j === i ? { ...x, to: v } : x))))}
+            <input
+              placeholder={i === 0 ? 'Letter (anonymous, arrives at dawn)' : 'Second letter (optional)'}
+              value={l.message}
+              onChange={(e) => setLetters((xs) => xs.map((x, j) => (j === i ? { ...x, message: e.target.value } : x)))}
+            />
+          </div>
+        ))}
+      {mode === 'connect' && (
+        <div className="row wrap">
+          {pickPlayer(a, setA)} <span>↔</span> {pickPlayer(b, setB)}
+          <span className="small muted">Tomorrow each may send the other one private message.</span>
+        </div>
+      )}
+      {mode === 'testament' && (
+        <textarea placeholder="Read out to everyone when you die (once per game)" value={message} onChange={(e) => setMessage(e.target.value)} />
+      )}
+      <button className="primary" disabled={!ready} onClick={send}>
+        Send the bird
+      </button>
+    </section>
+  );
+}
+
+/** A mail bird linked this player with others today: one private message to each. */
+function LinkCard({ links, onSend }: { links: string[]; onSend: (to: string, message: string) => void }) {
+  const [to, setTo] = useState(links[0]);
+  const [message, setMessage] = useState('');
+  const target = links.includes(to) ? to : links[0];
+  return (
+    <section className="card action mail-card">
+      <h3>🕊 Private message</h3>
+      <p className="small">A mail bird linked you with {links.join(', ')}. One private message each; only the two of you read it.</p>
+      <div className="row wrap">
+        <select value={target} onChange={(e) => setTo(e.target.value)}>
+          {links.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
+        <input placeholder="Your one private message" value={message} onChange={(e) => setMessage(e.target.value)} />
+        <button
+          className="primary"
+          disabled={!message.trim()}
+          onClick={() => {
+            onSend(target, message.trim());
+            setMessage('');
+          }}
+        >
+          Send to {target}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function LastWordsCard({ onSend }: { onSend: (message: string) => void }) {
+  const [message, setMessage] = useState('');
+  return (
+    <section className="card action">
+      <h3>🪦 Last words</h3>
+      <p className="small">You died. Leave one public message for the town (optional).</p>
+      <div className="row wrap">
+        <input placeholder="Your last words" value={message} onChange={(e) => setMessage(e.target.value)} />
+        <button className="primary" disabled={!message.trim()} onClick={() => onSend(message.trim())}>
+          Say it
+        </button>
+      </div>
+    </section>
+  );
+}
+
 /** Ventriloquist's once-a-day action: a public message in another player's name. */
 function VoiceCard({ options, onSend }: { options: string[]; onSend: (as: string, message: string) => void }) {
   const [as, setAs] = useState(options[0] ?? '');
@@ -733,6 +857,29 @@ function EventLine({ e, players, admin, forgedBy }: { e: GameEvent; players: Pub
       return (
         <div className="ev team">
           <span className="pill">mafia</span> <b style={{ color }}>{actor?.name}</b> {String(e.data.message ?? '')}
+        </div>
+      );
+    case 'letter': {
+      // God view: say who received it (players see only their own mail).
+      const toId = e.data.to ? String(e.data.to) : e.vis.scope === 'players' ? e.vis.ids[0] : undefined;
+      const to = toId ? players.find((p) => p.id === toId) : undefined;
+      const label = !admin ? 'mail bird' : e.data.link && e.actor ? 'private link' : to ? `to ${to.name}` : 'mail bird';
+      return (
+        <div className="ev private letter">
+          <span className="pill">🕊 {label}</span> {e.text}
+        </div>
+      );
+    }
+    case 'testament':
+      return (
+        <div className="ev headline testament">
+          <span className="pill">sealed letter</span> {e.text}
+        </div>
+      );
+    case 'last_words':
+      return (
+        <div className="ev chat last-words">
+          <span className="pill">last words</span> <b style={{ color }}>{actor?.name}</b> {String(e.data.message ?? '')}
         </div>
       );
     case 'thought':
