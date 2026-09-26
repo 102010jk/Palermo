@@ -8,7 +8,8 @@ export type RoleId =
   | 'crazy_murderer'
   | 'crazy_doctor'
   | 'crazy_tracker'
-  | 'crazy_trapper';
+  | 'crazy_trapper'
+  | 'ventriloquist';
 export type Team = 'town' | 'mafia';
 export type Phase = 'lobby' | 'night' | 'day' | 'ended';
 export type PlayerKind = 'human' | 'ai' | 'bot';
@@ -17,7 +18,7 @@ export type Winner = Team | 'draw';
 /** What a night role does when it acts. New roles plug in by adding a kind here and handling it in resolveNight. */
 export type NightActionKind = 'kill' | 'protect' | 'track' | 'trap';
 /** Actions used during the day (the gunman's single shot). */
-export type DayActionKind = 'shoot';
+export type DayActionKind = 'shoot' | 'throw_voice';
 
 export interface GameSettings {
   /** Free-form label shown in the UI and usable as a stats filter, e.g. "classic". */
@@ -173,7 +174,9 @@ export interface GameState {
   voteDeadlineAt?: number | null;
   voteDeadlineStartedAt?: number | null;
   /** Visual games: chat messages waiting to be spoken, and until when the current one is on screen. */
-  speechQueue?: { playerId: string; text: string }[];
+  speechQueue?: { playerId: string; text: string; forgedBy?: string }[];
+  /** ventriloquistId -> round in which the voice was last thrown (once per day). */
+  voiceUsed?: Record<string, number>;
   floorUntil?: number | null;
   /** Visual games: the night is being played out (actions locked) and resolves at phaseEndsAt. */
   nightPlanned?: boolean;

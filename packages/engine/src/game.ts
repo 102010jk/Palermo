@@ -281,9 +281,13 @@ export class Game {
       const role = ROLES[shown];
       let text = `Your role: ${role.name}. ${role.description}`;
       const mates = this.knowsPartners(p) ? this.partnersOf(p).map((m) => m.publicName) : [];
-      if (mates.length) text += ` Your fellow murderers: ${mates.join(', ')}.`;
+      const mateList = this.knowsPartners(p) ? this.partnersOf(p).map((m) => `${m.publicName} (${ROLES[m.role!].name})`) : [];
+      if (mateList.length) text += ` Your mafia partners: ${mateList.join(', ')}.`;
       if (shown === 'murderer' && lone) {
         text += ' This game the murderers work alone: you do not know the other murderers (if any) and there is no private murderer chat.';
+      }
+      if (shown === 'ventriloquist' && lone) {
+        text += ' This game the mafia works alone: you do not know the murderers and there is no private night chat.';
       }
       out.push(this.emit('role_assigned', { scope: 'players', ids: [p.id] }, text, { role: shown, teammates: mates }, p.id));
     }
@@ -305,13 +309,13 @@ export class Game {
     return this.state.players.some((p) => p.role === 'crazy_murderer');
   }
 
-  /** Real murderers who know (and can talk to) each other. */
+  /** Mafia members (murderers, ventriloquist) who know (and can talk to) each other. */
   knowsPartners(p: Player): boolean {
-    return p.role === 'murderer' && !this.loneWolves();
+    return !!p.role && !isCrazy(p.role) && teamOf(p.role) === 'mafia' && !this.loneWolves();
   }
 
   partnersOf(p: Player): Player[] {
-    return this.knowsPartners(p) ? this.state.players.filter((m) => m.role === 'murderer' && m.id !== p.id) : [];
+    return this.knowsPartners(p) ? this.state.players.filter((m) => m.id !== p.id && this.knowsPartners(m)) : [];
   }
 
   /** The night action a player believes to have (crazy roles act like the role they believe in). */
@@ -325,12 +329,14 @@ export class Game {
     return this.settings.gameStyle === 'visual';
   }
 
-  private speak(p: Player, text: string): GameEvent {
+  /** A chat message in `p`'s name. With `forgedBy` it was really written by the ventriloquist (only the god view knows). */
+  private speak(p: Player, text: string, forgedBy?: string): GameEvent[] {
     const s = this.state;
     if (this.visual()) s.floorUntil = this.now() + readingTimeMs(text);
     const ev = this.emit('chat', { scope: 'public' }, `${p.publicName}: ${text}`, { message: text }, p.id);
     this.extendVoteDeadline();
-    return ev;
+    if (!forgedBy) return [ev];
+    return [ev, this.emit('notice', { scope: 'admin' }, `Forged: ${this.player(forgedBy)?.publicName} spoke as ${p.publicName}.`, { kind: 'forged', by: forgedBy, as: p.id, chatSeq: ev.seq })];
   }
 
   /** Visual games: the next queued message gets the floor once the previous one has been read. */
@@ -340,7 +346,7 @@ export class Game {
     while (s.speechQueue.length) {
       const next = s.speechQueue.shift()!;
       const p = this.player(next.playerId);
-      if (p?.alive) return [this.speak(p, next.text)];
+      if (p?.alive) return this.speak(p, next.text, next.forgedBy);
     }
     return [];
   }
@@ -492,7 +498,7 @@ export class Game {
       if (p.role && apparentRole(p.role) === 'murderer') {
         throw new GameError('This game the murderers work alone: there is no private chat at night.');
       }
-      throw new GameError('It is night. Only murderers can talk (privately with each other). Wait for the day.');
+      throw new GameError('It is night. Only the mafia can talk (privately with each other). Wait for the day.');
     }
     this.checkChatLimits(p, text);
     const out = this.emitThought(p, thought, 'chat');
@@ -500,7 +506,7 @@ export class Game {
       if (this.visual()) {
         // One voice at a time, so people can read along: the rest waits in a queue.
         s.speechQueue ??= [];
-        if ((s.floorUntil ?? 0) <= this.now() && !s.speechQueue.length) out.push(this.speak(p, text));
+        if ((s.floorUntil ?? 0) <= this.now() && !s.speechQueue.length) out.push(...this.speak(p, text));
         else {
           s.speechQueue.push({ playerId: p.id, text });
           out.push(
@@ -512,12 +518,12 @@ export class Game {
         }
         return out;
       }
-      out.push(this.speak(p, text));
+      out.push(...this.speak(p, text));
       return out;
     }
     // night: murderers' private chat
     out.push(
-      this.emit('team_chat', { scope: 'team', team: 'mafia' }, `[murderers] ${p.publicName}: ${text}`, { message: text }, p.id),
+      this.emit('team_chat', { scope: 'team', team: 'mafia' }, `[mafia] ${p.publicName}: ${text}`, { message: text }, p.id),
     );
     return out;
   }
@@ -572,7 +578,7 @@ export class Game {
       if (kind === 'kill') {
         if (t.id === p.id) return false;
         if (!this.knowsPartners(p)) return true;
-        if (t.role === 'murderer') return false;
+        if (t.role && teamOf(t.role) === 'mafia') return false;
         // Separate kills: never the house a partner already goes to.
         if (this.settings.killMode === 'separate') {
           return !this.partnersOf(p).some((m) => s.nightChoices[m.id]?.target === t.id);
@@ -829,6 +835,42 @@ export class Game {
     return out;
   }
 
+  // ---------------------------------------------------------------- ventriloquist
+
+  /** Once per day: a chat message appears in another living player's name. */
+  throwVoice(playerId: string, asRef: string, message: string, thought?: string): GameEvent[] {
+    const s = this.state;
+    const p = this.mustPlayer(playerId);
+    if (s.phase !== 'day') throw new GameError('You can only throw your voice during the day.');
+    if (!p.alive) throw new GameError('You are dead.');
+    if (!p.role || ROLES[p.role].dayAction !== 'throw_voice') throw new GameError('You cannot throw your voice.');
+    s.voiceUsed ??= {};
+    if (s.voiceUsed[p.id] === s.round) throw new GameError('You already threw your voice today. Try again tomorrow.');
+    const t = this.resolveTarget(asRef);
+    if (!t.alive) throw new GameError(`${t.publicName} is dead: the dead do not talk.`);
+    if (t.id === p.id) throw new GameError('Speak as someone else (use say for your own messages).');
+    const text = message.trim().slice(0, 2000);
+    if (!text) throw new GameError('Message must not be empty.');
+    // Counts against the ventriloquist's own chat limits (length, per-day count, cooldown).
+    this.checkChatLimits(p, text);
+    s.voiceUsed[p.id] = s.round;
+    const out = this.emitThought(p, thought, `throw voice as ${t.publicName}`);
+    if (this.knowsPartners(p)) {
+      out.push(this.emit('team_chat', { scope: 'team', team: 'mafia' }, `[mafia] ${p.publicName} throws their voice as ${t.publicName}: "${text}"`, { message: `(as ${t.publicName}) ${text}`, forged: true }, p.id));
+    }
+    if (this.visual()) {
+      s.speechQueue ??= [];
+      if ((s.floorUntil ?? 0) <= this.now() && !s.speechQueue.length) out.push(...this.speak(t, text, p.id));
+      else {
+        s.speechQueue.push({ playerId: t.id, text, forgedBy: p.id });
+        out.push(this.emit('notice', { scope: 'players', ids: [p.id] }, `Others are speaking: your forged message is in line (position ${s.speechQueue.length}).`, { kind: 'speech_queued', position: s.speechQueue.length }, p.id));
+      }
+    } else {
+      out.push(...this.speak(t, text, p.id));
+    }
+    return out;
+  }
+
   // ---------------------------------------------------------------- gunman
 
   shoot(playerId: string, targetRef: string, thought?: string): GameEvent[] {
@@ -1015,7 +1057,7 @@ export class Game {
     const alive = this.alive();
     const mafia = alive.filter((p) => p.role && teamOf(p.role) === 'mafia').length;
     const town = alive.length - mafia;
-    if (mafia === 0) return { winner: 'town', reason: 'All murderers have been eliminated. The town wins!' };
+    if (mafia === 0) return { winner: 'town', reason: 'The whole mafia has been eliminated. The town wins!' };
     if (mafia >= town) return { winner: 'mafia', reason: 'The murderers now control Palermo. The murderers win!' };
     if (this.settings.maxRounds && this.state.round >= this.settings.maxRounds && this.state.phase === 'day') {
       return { winner: 'draw', reason: `Round limit (${this.settings.maxRounds}) reached. The game ends in a draw.` };
@@ -1100,16 +1142,23 @@ export class Game {
     if (this.settings.allowSkipVote) options.push(SKIP);
     const v = s.votes[p.id];
     const canShoot = !!p.role && ROLES[p.role].dayAction === 'shoot' && !(s.shotsFired?.[p.id] ?? 0);
+    const canThrow = !!p.role && ROLES[p.role].dayAction === 'throw_voice' && s.voiceUsed?.[p.id] !== s.round;
+    const dayAction = canShoot
+      ? { dayAction: { kind: 'shoot' as const, options: shootOptions } }
+      : canThrow
+        ? { dayAction: { kind: 'throw_voice' as const, options: shootOptions } }
+        : {};
     return {
       kind: 'vote',
       options,
       done: !!v,
-      ...(canShoot ? { dayAction: { kind: 'shoot' as const, options: shootOptions } } : {}),
+      ...dayAction,
       hint:
         (v
           ? `You voted for ${v === SKIP ? SKIP : this.player(v)!.publicName}. You may change your vote until everyone has voted.`
           : 'Discuss, then vote. The day ends when every living player has voted.') +
-        (canShoot ? ' You still have your one bullet: shoot kills a player at once and reveals you as the Gunman.' : ''),
+        (canShoot ? ' You still have your one bullet: shoot kills a player at once and reveals you as the Gunman.' : '') +
+        (canThrow ? ' Once today you can throw your voice: throw_voice makes a message appear in another player\'s name.' : ''),
     };
   }
 
@@ -1139,7 +1188,7 @@ export class Game {
         ended ||
         (!p.alive && this.settings.revealRoleOnDeath) ||
         !!s.revealed?.includes(p.id) ||
-        (knowsMates && p.role === 'murderer');
+        (knowsMates && !!p.role && teamOf(p.role) === 'mafia');
       const shown = revealed ? p.role : p.id === viewerId ? myRole : null;
       if (shown) {
         pub.role = shown;

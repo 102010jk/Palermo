@@ -172,7 +172,21 @@ model, role, tým, výhra, přežil, styl hry, série…) pro Excel / analýzu.
 | Pistolník | město | Jeden náboj za hru, střílí ve dne veřejně (prozradí se). |
 | Šílený vrah/doktor/stopař/pastičkář | město | Myslí si, že má danou roli, ale nic nedělá (zůstává doma), výsledky má vždy chybné. Oznamuje se jako zdánlivá role. Pravdu uvidí jen god view a na konci hry. |
 
-Se šíleným vrahem ve hře se vrazi navzájem neznají (jinak by se šílený prozradil).
+| Břichomluvec | mafie | Nezabíjí. Jednou za den napíše do chatu zprávu, která vypadá, jako by ji řekl jiný živý hráč (`throw_voice`). Zná vrahy a v noci s nimi mluví; město ho musí vyřadit taky. |
+
+Se šíleným vrahem ve hře se vrazi (i břichomluvec) navzájem neznají (jinak by se šílený prozradil).
+
+#### Břichomluvec: co testuje
+
+Zapíná se v *New game → Roles* počtem 🗣 Ventriloquist (0 = vypnuto, 1 = zapnuto), nebo presetem **Deception 9**.
+V konfiguraci runneru: `"roleCounts": { "murderer": 2, "ventriloquist": 1, "doctor": 1, "tracker": 1 }`.
+
+- Testuje, jestli si AI **všimne, že „řekla“ něco, co neřekla**, a ozve se (zapře to), nebo to mlčky přejde.
+- Jestli ostatní AI **uvěří zapírání**, nebo „přistiženého lháře“ vyhlasují. Když jsou role oznámené
+  (*announce roles*), město ví, že padělky existují, a musí přemýšlet, čí slova jsou pravá.
+- Jestli mafie umí padělek **koordinovat**: partneři v noci vidí, co a za koho břichomluvec řekl.
+- Ve **god view** je padělaná zpráva označená 🗣 „forged by …“ (v logu i v bublině), hráči to nevidí.
+  Ve statistikách se zpráva počítá skutečnému autorovi.
 
 ### Pojistka proti zaseknutému hlasování a mazání her
 

@@ -129,10 +129,11 @@ export function GamePage({ gameId }: { gameId: string }) {
       const now = Date.now();
       setBubbles((b) => {
         const next = { ...b };
+        const forgedBy = new Map(p.events.filter((e) => e.data.kind === 'forged').map((e) => [Number(e.data.chatSeq), String(e.data.by)]));
         for (const e of p.events) {
           const bubble = bubbleFrom(e);
           // Thoughts only show up in god view (they are only sent to admins anyway).
-          if (bubble && e.actor) next[e.actor] = { ...bubble, at: now };
+          if (bubble && e.actor) next[e.actor] = { ...bubble, at: now, forgedBy: forgedBy.get(e.seq) };
         }
         return next;
       });
@@ -257,6 +258,9 @@ export function GamePage({ gameId }: { gameId: string }) {
 
   const me = view.you;
   const req = view.required;
+  // Ventriloquist lines: chat seq -> real author (admin notices, god view only).
+  const forged = new Map<number, string>();
+  for (const e of events) if (e.data.kind === 'forged') forged.set(Number(e.data.chatSeq), String(e.data.by));
   const act = async (path: string, body: unknown) => {
     try {
       setError(null);
@@ -393,7 +397,7 @@ export function GamePage({ gameId }: { gameId: string }) {
             }}
           >
             {shownEvents.map((e) => (
-              <EventLine key={e.seq} e={e} players={view.players} admin={view.isAdmin} />
+              <EventLine key={e.seq} e={e} players={view.players} admin={view.isAdmin} forgedBy={admin ? forged.get(e.seq) : undefined} />
             ))}
           </div>
           {view.phase === 'ended' && events.length > 0 && (
@@ -472,7 +476,7 @@ export function GamePage({ gameId }: { gameId: string }) {
                 <>
                   <p className={`role-name ${me.role}`}>{ROLES[me.role].name}</p>
                   <p className="small">{me.roleDescription}</p>
-                  {me.teammates.length > 0 && <p className="small">Fellow murderers: {me.teammates.join(', ')}</p>}
+                  {me.teammates.length > 0 && <p className="small">Mafia partners: {me.teammates.join(', ')}</p>}
                 </>
               ) : (
                 <p className="small muted">Your role will be revealed when the game starts.</p>
@@ -528,7 +532,7 @@ export function GamePage({ gameId }: { gameId: string }) {
                     Withdraw
                   </button>
                 )}
-                {req.dayAction && (
+                {req.dayAction?.kind === 'shoot' && (
                   <button
                     className="danger"
                     disabled={!selected || !req.dayAction.options.includes(selected)}
@@ -544,6 +548,10 @@ export function GamePage({ gameId }: { gameId: string }) {
                 )}
               </div>
             </section>
+          )}
+
+          {me && me.alive && req.dayAction?.kind === 'throw_voice' && (
+            <VoiceCard options={req.dayAction.options} onSend={(as, message) => act('throw_voice', { as, message })} />
           )}
 
           {error && <p className="error">{error}</p>}
@@ -636,20 +644,55 @@ export function GamePage({ gameId }: { gameId: string }) {
   );
 }
 
-function EventLine({ e, players, admin }: { e: GameEvent; players: PublicPlayer[]; admin: boolean }) {
+/** Ventriloquist's once-a-day action: a public message in another player's name. */
+function VoiceCard({ options, onSend }: { options: string[]; onSend: (as: string, message: string) => void }) {
+  const [as, setAs] = useState(options[0] ?? '');
+  const [message, setMessage] = useState('');
+  return (
+    <section className="card action voice-card">
+      <h3>🗣 Throw your voice</h3>
+      <p className="small">Once today: the town hears this as if the chosen player said it. They will see it too.</p>
+      <div className="row wrap">
+        <select value={as} onChange={(e) => setAs(e.target.value)}>
+          {options.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
+        <input placeholder="What they will seem to say…" value={message} onChange={(e) => setMessage(e.target.value)} />
+        <button
+          className="danger"
+          disabled={!as || !message.trim()}
+          onClick={() => {
+            onSend(as, message.trim());
+            setMessage('');
+          }}
+        >
+          Speak as {as}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function EventLine({ e, players, admin, forgedBy }: { e: GameEvent; players: PublicPlayer[]; admin: boolean; forgedBy?: string }) {
   const actor = e.actor ? players.find((p) => p.id === e.actor) : undefined;
   const color = actor ? LOOKS[lookFor(actor)].color : undefined;
   switch (e.type) {
-    case 'chat':
+    case 'chat': {
+      const real = forgedBy ? players.find((p) => p.id === forgedBy) : undefined;
       return (
-        <div className="ev chat">
+        <div className={`ev chat ${forgedBy ? 'forged' : ''}`}>
           <b style={{ color }}>{actor?.name ?? '?'}</b> {String(e.data.message ?? '')}
+          {forgedBy && <span className="pill forged-pill" title="Ventriloquist: this line was not written by the player it shows">🗣 forged by {real?.name ?? '?'}</span>}
         </div>
       );
+    }
     case 'team_chat':
       return (
         <div className="ev team">
-          <span className="pill">murderers</span> <b style={{ color }}>{actor?.name}</b> {String(e.data.message ?? '')}
+          <span className="pill">mafia</span> <b style={{ color }}>{actor?.name}</b> {String(e.data.message ?? '')}
         </div>
       );
     case 'thought':

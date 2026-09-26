@@ -27,7 +27,7 @@ export function formatStatus(g: Game, playerId: string): string {
     const role = v.you.role ? ROLES[v.you.role].name : 'not assigned yet';
     lines.push(
       `You: ${v.you.name} | role: ${role}${v.you.team ? ` (${v.you.team})` : ''} | ${v.you.alive ? 'alive' : 'DEAD'}` +
-        (v.you.teammates.length ? ` | fellow murderers: ${v.you.teammates.join(', ')}` : ''),
+        (v.you.teammates.length ? ` | mafia partners: ${v.you.teammates.join(', ')}` : ''),
     );
   }
   const alive = v.players.filter((p) => p.alive).map((p) => p.name + identity(p));
@@ -67,7 +67,10 @@ export function formatStatus(g: Game, playerId: string): string {
     );
   } else if (r.kind !== 'none' || !r.done) {
     lines.push(`${r.done ? 'Done' : 'YOUR MOVE'}: ${r.hint}${r.options ? ` Options: ${r.options.join(', ')}` : ''}`);
-    if (r.dayAction) lines.push(`Gunman: shoot one of ${r.dayAction.options.join(', ')} (once per game).`);
+    if (r.dayAction?.kind === 'shoot') lines.push(`Gunman: shoot one of ${r.dayAction.options.join(', ')} (once per game).`);
+    if (r.dayAction?.kind === 'throw_voice') {
+      lines.push(`Ventriloquist: throw_voice as one of ${r.dayAction.options.join(', ')} (once today): your message appears in their name.`);
+    }
   } else {
     lines.push(`Waiting: ${r.hint}`);
   }

@@ -315,6 +315,10 @@ export function createPalermo(cfg: AppConfig): PalermoApp {
     '/api/games/:id/shoot',
     playerAction((g, pid, b) => manager.apply(g.state.id, (x) => x.shoot(pid, String(b.target ?? '')))),
   );
+  app.post(
+    '/api/games/:id/throw_voice',
+    playerAction((g, pid, b) => manager.apply(g.state.id, (x) => x.throwVoice(pid, String(b.as ?? ''), String(b.message ?? '')))),
+  );
 
   // admin game controls
   const adminAction = (fn: (id: string, body: Record<string, unknown>) => unknown) =>

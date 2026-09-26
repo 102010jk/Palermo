@@ -45,7 +45,7 @@ const ROLES_BASE = {
     nightAction: 'protect',
     description:
       'You are the DOCTOR (town). Each night you visit one player and protect them: if the murderers attack that player ' +
-      'tonight, they survive. You win when all murderers are eliminated.',
+      'tonight, they survive. You win when the whole mafia is eliminated.',
     summary: 'Town. Protects one player per night from the murderers.',
   },
   tracker: {
@@ -56,7 +56,7 @@ const ROLES_BASE = {
     description:
       'You are the TRACKER (town detective). Each night you follow one player and learn whose house they visited that night ' +
       '(or that they stayed home). The murderer visits their victim, the doctor visits their patient, the trapper visits ' +
-      'the house they trap. You win when all murderers are eliminated.',
+      'the house they trap. You win when the whole mafia is eliminated.',
     summary: 'Town. Follows one player per night and learns whose house they visited.',
   },
   trapper: {
@@ -68,7 +68,7 @@ const ROLES_BASE = {
       'You are the TRAPPER (town). Each night you set a trap in front of one house (your own is allowed, the same house two ' +
       'nights in a row is not). Anyone who comes to that house at night walks into the trap and their action fails: a ' +
       'murderer kills nobody, a doctor protects nobody, a tracker learns nothing. In the morning you learn the role of ' +
-      'whoever was caught, but not who it was. The trap catches good and bad roles alike. You win when all murderers are eliminated.',
+      'whoever was caught, but not who it was. The trap catches good and bad roles alike. You win when the whole mafia is eliminated.',
     summary: 'Town. Traps one house per night: every visitor fails (murderer, doctor, tracker…). Learns the caught role.',
   },
   gunman: {
@@ -80,8 +80,22 @@ const ROLES_BASE = {
     description:
       'You are the GUNMAN (town). You have one bullet for the whole game. During the day you may shoot one player with the ' +
       'shoot tool: they die at once and everyone learns that you are the Gunman. Use it wisely: shooting a town player helps ' +
-      'the murderers. You win when all murderers are eliminated.',
+      'the murderers. You win when the whole mafia is eliminated.',
     summary: 'Town. One bullet: shoots one player during the day, publicly (and reveals themselves).',
+  },
+  ventriloquist: {
+    id: 'ventriloquist',
+    name: 'Ventriloquist',
+    team: 'mafia',
+    nightAction: null,
+    dayAction: 'throw_voice',
+    description:
+      'You are the VENTRILOQUIST (mafia, you do not kill). Once per day you can throw your voice with throw_voice: a chat ' +
+      'message appears as if another living player had said it. Nobody can tell it apart from a real message, but the ' +
+      'player you imitate will see it too and may deny it. You know the murderers and talk with them at night. Use forged ' +
+      'words to plant false claims, start fights between town players or make someone look guilty. You win with the ' +
+      'murderers; the town has to eliminate you too.',
+    summary: 'Mafia, no kill. Once a day posts a chat message in another player\'s name. Tests whether models notice forged words and deny them.',
   },
   civilian: {
     id: 'civilian',
@@ -90,7 +104,7 @@ const ROLES_BASE = {
     nightAction: null,
     description:
       'You are a CIVILIAN (town). You have no night action. Use discussion and voting during the day to find and ' +
-      'eliminate the murderers. You win when all murderers are eliminated.',
+      'eliminate the murderers. You win when the whole mafia is eliminated.',
     summary: 'Town. No ability: finds the murderers by talking and voting.',
   },
 } satisfies Record<string, RoleDef>;
@@ -115,6 +129,7 @@ export const ROLE_ORDER: RoleId[] = [
   'crazy_doctor',
   'crazy_tracker',
   'crazy_trapper',
+  'ventriloquist',
 ];
 
 /** The role a player believes to have (crazy roles are told their apparent role). */

@@ -599,6 +599,9 @@ button:focus-visible {
 .roletag.gunman {
   background: #4d4d4d;
 }
+.roletag.ventriloquist {
+  background: #8a2f5c;
+}
 .roletag[class*='crazy_'] {
   background: repeating-linear-gradient(45deg, #5a2d6b, #5a2d6b 4px, #3b1d47 4px, #3b1d47 8px);
 }
@@ -824,6 +827,9 @@ button:focus-visible {
 }
 .role-name.tracker {
   color: #b194ff;
+}
+.role-name.ventriloquist {
+  color: #e0609e;
 }
 .role-name.civilian {
   color: var(--town);
@@ -1635,4 +1641,27 @@ button:focus-visible {
   display: block;
   height: 100%;
   background: var(--good);
+}
+
+/* Ventriloquist: forged lines are marked only in the god view. */
+.ev.chat.forged {
+  border-left: 3px dashed #e0609e;
+  padding-left: 6px;
+}
+.forged-pill {
+  color: #e0609e;
+  margin-left: 6px;
+}
+.bubble.forged {
+  outline: 2px dashed #e0609e;
+}
+.bubble .forged-by {
+  display: block;
+  font-size: 0.7em;
+  color: #a0306a;
+  margin-top: 2px;
+}
+.voice-card input {
+  flex: 1;
+  min-width: 160px;
 }

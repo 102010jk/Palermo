@@ -7,6 +7,8 @@ export interface Bubble {
   text: string;
   kind: BubbleKind;
   at: number;
+  /** Ventriloquist: the player who really said it (god view only). */
+  forgedBy?: string;
 }
 
 /** One step of the god-view night animation: a player walks to a house, acts, walks back. */
@@ -190,9 +192,10 @@ export function TownRing(props: Props) {
             title={p.realName ?? p.name}
           >
             {bubble && !hidden && (
-              <span className={`bubble ${bubble.kind}`}>
+              <span className={`bubble ${bubble.kind} ${bubble.forgedBy && props.godView ? 'forged' : ''}`}>
                 {bubble.kind === 'thought' && '💭 '}
                 {bubble.text.length > 140 ? `${bubble.text.slice(0, 140)}…` : bubble.text}
+                {bubble.forgedBy && props.godView && <span className="forged-by">🗣 really {nameOf(bubble.forgedBy)}</span>}
               </span>
             )}
             {votes > 0 && onSquare && <span className="vote-badge">{votes}</span>}

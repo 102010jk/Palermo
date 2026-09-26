@@ -8,6 +8,7 @@ const ICON: Record<string, string> = {
   tracker: '👁',
   trapper: '🪤',
   gunman: '🔫',
+  ventriloquist: '🗣',
   civilian: '🏠',
 };
 const iconOf = (r: RoleId) => (ROLES[r].appearsAs ? `🌀${ICON[ROLES[r].appearsAs!]}` : ICON[r]);
@@ -19,6 +20,12 @@ const PRESETS: { id: string; label: string; hint: string; counts: Counts | null 
   { id: 'classic6', label: 'Classic 6', hint: '1 murderer, doctor, tracker', counts: { murderer: 1, doctor: 1, tracker: 1 } },
   { id: 'classic10', label: 'Classic 10', hint: '2 murderers, doctor, tracker, trapper', counts: { murderer: 2, doctor: 1, tracker: 1, trapper: 1 } },
   { id: 'guns8', label: 'Traps & guns 8', hint: '2 murderers, doctor, trapper, gunman', counts: { murderer: 2, doctor: 1, trapper: 1, gunman: 1 } },
+  {
+    id: 'deception9',
+    label: 'Deception 9',
+    hint: '2 murderers + ventriloquist, doctor, tracker: who really said that?',
+    counts: { murderer: 2, ventriloquist: 1, doctor: 1, tracker: 1 },
+  },
   {
     id: 'chaos10',
     label: 'Chaos 10',

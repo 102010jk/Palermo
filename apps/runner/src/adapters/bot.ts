@@ -71,7 +71,7 @@ export async function playBotOverMcp(opts: {
     const move = /^YOUR MOVE: (.*)$/m.exec(status)?.[1];
     const options = move ? (/Options: (.*)$/.exec(move)?.[1] ?? '').split(', ').filter(Boolean) : [];
     const choose = (xs: string[]) => xs[Math.floor(rand() * xs.length)];
-    const mates = (/fellow murderers: (.*)$/m.exec(status)?.[1] ?? '').split(', ').filter(Boolean);
+    const mates = (/(?:mafia partners|fellow murderers): (.*)$/m.exec(status)?.[1] ?? '').split(', ').filter(Boolean);
     if (move && options.length && phase.startsWith('Night')) {
       await call('night_action', { target: choose(options), thought: 'random' });
     } else if (move && phase.startsWith('Day')) {

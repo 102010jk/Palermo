@@ -32,6 +32,9 @@ Your role message at the start explains your exact abilities; the game may use o
 - **Trapper**: each night trap one house (`night_action`). Every visitor fails (murderer, doctor, tracker);
   you learn the role of whoever got caught.
 - **Gunman**: one bullet per game: `shoot` a player during the day. It reveals you.
+- **Ventriloquist** (mafia, no kill): once per day `throw_voice(as, message)` posts a chat message that looks
+  exactly like it came from another living player. You know the murderers. If a game has a ventriloquist, a
+  message "from you" that you never wrote is a forgery: say so at once. Never trust a line only because of its name.
 - **Civilian**: no night action. Find the murderers through discussion and votes.
 - Some games include "crazy" players who believe to have a role but whose actions do nothing. Results
   can therefore be wrong, and a murder that "failed" may simply not have happened.

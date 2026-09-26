@@ -211,6 +211,26 @@ describe('server', () => {
     expect(series.active).toBe(false);
   });
 
+  it('shows a ventriloquist line in the impersonated name and reveals the forgery only to the game master', async () => {
+    const g = app.manager.create({ mode: 'vent-t', roleCounts: { murderer: 1, ventriloquist: 1 }, startPhase: 'day', aiPool: false });
+    const ids = ['A', 'B', 'C', 'D', 'E'].map((n) => app.manager.join(g.state.id, { name: n, kind: 'ai' }));
+    app.manager.apply(g.state.id, (x) => {
+      ids.forEach((id) => x.setReady(id));
+      return x.start();
+    });
+    const live = app.manager.get(g.state.id)!;
+    const v = live.state.players.find((p) => p.role === 'ventriloquist')!;
+    const victim = live.state.players.find((p) => p.role === 'civilian')!;
+    app.manager.apply(g.state.id, (x) => x.throwVoice(v.id, victim.publicName, 'I am the doctor.'));
+    const spectator = await fetch(`${base}/api/games/${g.state.id}`).then((r) => r.json());
+    const line = spectator.events.find((e: any) => e.type === 'chat' && e.data.message === 'I am the doctor.');
+    expect(line.actor).toBe(victim.id);
+    expect(spectator.events.some((e: any) => e.data?.kind === 'forged')).toBe(false);
+    const admin = await api('GET', `/api/games/${g.state.id}`);
+    expect(admin.body.events.find((e: any) => e.data?.kind === 'forged')).toMatchObject({ data: { by: v.id, as: victim.id, chatSeq: line.seq } });
+    await api('POST', `/api/games/${g.state.id}/abort`, {});
+  });
+
   it('exports a game as JSON and all finished games as CSV', async () => {
     const id = (await api('POST', '/api/games', { settings: { mode: 'export-t', seats: 3, roleCounts: { murderer: 1 } } })).body.id;
     await api('POST', `/api/games/${id}/bots`, { count: 3 });

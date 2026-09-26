@@ -154,7 +154,7 @@ export function computeStats(db: Db, filter: StatsFilter = { settings: {} }): St
   const msgLen = new Map<string, number>();
 
   const eventsStmt = db.sql.prepare(
-    "SELECT type, actor, data, round FROM events WHERE game_id = ? AND type IN ('chat','notice')",
+    "SELECT seq, type, actor, data, round FROM events WHERE game_id = ? AND type IN ('chat','notice')",
   );
   const usageStmt = db.sql.prepare(
     'SELECT account_id, SUM(input_tokens + cache_read_tokens + cache_write_tokens) AS tin, SUM(output_tokens) AS tout, SUM(COALESCE(cost_usd,0)) AS cost FROM usage WHERE game_id = ? GROUP BY account_id',
@@ -194,10 +194,18 @@ export function computeStats(db: Db, filter: StatsFilter = { settings: {} }): St
     }
     const roleOf = new Map(players.map((p) => [p.player_id as string, p.role as string]));
 
-    for (const e of eventsStmt.all(gid) as Row[]) {
+    const rows = eventsStmt.all(gid) as Row[];
+    // Ventriloquist lines are shown in someone else's name: count them for the real author.
+    const forgedBy = new Map<number, string>();
+    for (const e of rows) {
+      if (e.type !== 'notice') continue;
+      const data = JSON.parse(e.data as string) as Record<string, unknown>;
+      if (data.kind === 'forged') forgedBy.set(Number(data.chatSeq), String(data.by));
+    }
+    for (const e of rows) {
       const data = JSON.parse(e.data as string) as Record<string, unknown>;
       if (e.type === 'chat' && e.actor) {
-        const b = byPlayer.get(e.actor as string);
+        const b = byPlayer.get(forgedBy.get(Number(e.seq)) ?? (e.actor as string));
         if (b) {
           b.messages++;
           msgLen.set(b.key, (msgLen.get(b.key) ?? 0) + String(data.message ?? '').length);

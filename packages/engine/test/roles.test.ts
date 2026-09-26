@@ -177,3 +177,70 @@ describe('role counts and pause', () => {
     expect(g.state.pausedAt).toBeNull();
   });
 });
+
+describe('ventriloquist', () => {
+  const lineup: RoleId[] = ['murderer', 'ventriloquist', 'doctor', 'civilian', 'civilian', 'civilian'];
+
+  it('knows the murderers and they know the ventriloquist', () => {
+    const { g, one, privateText } = setup(lineup);
+    const m = one('murderer');
+    const v = one('ventriloquist');
+    expect(privateText(v.id)).toContain(`Your mafia partners: ${m.publicName} (Murderer)`);
+    expect(privateText(m.id)).toContain(`${v.publicName} (Ventriloquist)`);
+    expect(g.view(m.id).players.find((p) => p.id === v.id)?.role).toBe('ventriloquist');
+    // The murderer cannot kill a mafia partner.
+    expect(g.required(m.id).options).not.toContain(v.publicName);
+  });
+
+  it('once a day posts a public message that looks like it came from another player', () => {
+    const { g, one, all } = setup(lineup, { startPhase: 'day' });
+    const v = one('ventriloquist');
+    const m = one('murderer');
+    const [c1, c2] = all('civilian');
+    expect(g.required(v.id).dayAction?.kind).toBe('throw_voice');
+    g.throwVoice(v.id, c1.publicName, `I am the doctor, trust me.`);
+    const chat = g.eventsFor(c2.id).filter((e) => e.type === 'chat');
+    expect(chat.at(-1)).toMatchObject({ actor: c1.id, text: `${c1.publicName}: I am the doctor, trust me.` });
+    // Town players see nothing but the chat line; the impersonated player sees it too.
+    expect(g.eventsFor(c1.id).some((e) => /throws their voice|Forged/.test(e.text))).toBe(false);
+    // The mafia partner is told; the god view (admin) sees the forgery.
+    expect(g.eventsFor(m.id).some((e) => e.type === 'team_chat' && /throws their voice as/.test(e.text))).toBe(true);
+    const forged = g.state.events.find((e) => (e.data as { kind?: string } | undefined)?.kind === 'forged')!;
+    expect(forged.data).toMatchObject({ by: v.id, as: c1.id, chatSeq: chat.at(-1)!.seq });
+    expect(g.eventsFor(c2.id).some((e) => e.seq === forged.seq)).toBe(false);
+    // Once per day only.
+    expect(g.required(v.id).dayAction).toBeUndefined();
+    expect(() => g.throwVoice(v.id, c2.publicName, 'again')).toThrow(/already threw your voice/);
+  });
+
+  it('cannot speak as themselves, the dead, or at night, and only the ventriloquist can', () => {
+    const { g, one, all } = setup(lineup, { startPhase: 'day' });
+    const v = one('ventriloquist');
+    const [c1] = all('civilian');
+    expect(() => g.throwVoice(v.id, v.publicName, 'hi')).toThrow(/someone else/);
+    expect(() => g.throwVoice(c1.id, v.publicName, 'hi')).toThrow(/cannot throw your voice/);
+    expect(() => g.throwVoice(v.id, c1.publicName, '   ')).toThrow(/empty/);
+  });
+
+  it('counts for the mafia: the town must eliminate the ventriloquist too', () => {
+    const { g, one } = setup(['murderer', 'ventriloquist', 'doctor', 'civilian', 'civilian', 'civilian', 'civilian'], { startPhase: 'day' });
+    const m = one('murderer');
+    for (const p of g.alive()) g.vote(p.id, p.id === m.id ? one('doctor').id : m.id);
+    expect(g.player(m.id)!.alive).toBe(false);
+    expect(g.state.phase).not.toBe('ended');
+  });
+
+  it('forged words wait in the speech queue in visual games', () => {
+    const { g, one, all, advance } = setup(lineup, { startPhase: 'day', gameStyle: 'visual', voteDeadlineSec: null });
+    const v = one('ventriloquist');
+    const [c1, c2] = all('civilian');
+    g.say(c2.id, 'Good morning everyone.');
+    g.throwVoice(v.id, c1.publicName, 'I saw nothing last night.');
+    expect(g.state.events.filter((e) => e.type === 'chat' && e.actor === c1.id)).toHaveLength(0);
+    advance(20_000);
+    g.tick();
+    const line = g.state.events.find((e) => e.type === 'chat' && e.actor === c1.id)!;
+    expect(line.text).toContain('I saw nothing last night.');
+    expect(g.state.events.some((e) => (e.data as { kind?: string; chatSeq?: number } | undefined)?.chatSeq === line.seq)).toBe(true);
+  });
+});

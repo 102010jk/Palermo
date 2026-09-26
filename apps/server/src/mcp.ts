@@ -226,7 +226,7 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
   registerTool(
     'say',
     {
-      description: 'Send a chat message. Day: everyone reads it. Night: only your fellow murderers (murderers only).',
+      description: 'Send a chat message. Day: everyone reads it. Night: only your mafia partners (mafia only).',
       inputSchema: { message: z.string().min(1).max(2000), thought },
     },
     guard(async (args: { message: string; thought?: string }) => {
@@ -283,6 +283,25 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
       const { game, playerId } = seat();
       manager.apply(game.state.id, (g) => g.shoot(playerId, args.target, args.thought));
       return text(formatStatus(manager.get(game.state.id)!, playerId));
+    }),
+  );
+
+  registerTool(
+    'throw_voice',
+    {
+      description:
+        'Ventriloquist only, once per day: post a public chat message that appears to come from another living player ' +
+        '(`as` = their name). Nobody can tell it is forged, but that player also reads it and may deny it. ' +
+        'It counts against your own chat limits.',
+      inputSchema: { as: z.string().min(1).max(40), message: z.string().min(1).max(2000), thought },
+    },
+    guard(async (args: { as: string; message: string; thought?: string }) => {
+      const { game, playerId } = seat();
+      const events = manager.apply(game.state.id, (g) => g.throwVoice(playerId, args.as, args.message, args.thought));
+      if (events.some((e) => e.data.kind === 'speech_queued')) {
+        return text(`Others are speaking: your forged message is in line and will be heard as ${args.as} shortly. Call wait_for_events.`);
+      }
+      return text(`The town heard it in ${args.as}'s voice. Watch how they react: call wait_for_events.`);
     }),
   );
 
