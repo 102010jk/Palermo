@@ -49,9 +49,16 @@ export function parseAgyModels(out: string): CatalogEntry[] {
 /** What this PC can run: models.json (+ models.local.json) for installed CLIs, plus everything `agy models` lists. */
 export async function buildCatalog(root: string): Promise<CatalogEntry[]> {
   const installed = new Map<string, boolean>();
-  for (const [provider, cmd] of Object.entries(CLI)) installed.set(provider, !!(await cliOutput(cmd!, ['--version'])));
+  for (const [provider, cmd] of Object.entries(CLI)) {
+    if (provider !== 'agy') installed.set(provider, (await cliOutput(cmd!, ['--version'])) !== null);
+  }
   const list = [...readModels(join(root, 'models.json')), ...readModels(join(root, 'models.local.json'))];
-  if (installed.get('agy')) list.push(...parseAgyModels((await cliOutput('agy', ['models'])) ?? ''));
+  // agy: its model list is the installation check (it can take a while: it asks Google for the list).
+  const agyOut = await cliOutput('agy', ['models'], 60000);
+  const agyModels = parseAgyModels(agyOut ?? '');
+  installed.set('agy', agyOut !== null);
+  if (agyOut !== null && !agyModels.length) console.log(`agy is installed but \`agy models\` listed nothing:\n${agyOut.slice(0, 500)}`);
+  list.push(...agyModels);
   const seen = new Set<string>();
   const out: CatalogEntry[] = [];
   for (const e of list) {
@@ -80,11 +87,15 @@ export async function runPool(cfg: RunnerConfig, api: Api, skill: string, root: 
   const running = new Map<string, Promise<void>>();
   let n = 0;
   let offline = false;
+  let lastSummary = '';
   for (;;) {
     try {
       const r = await api.req('POST', '/api/admin/pool/hello', { host: hostname(), catalog, running: [...running.keys()] });
       if (offline) console.log('Server reachable again.');
       offline = false;
+      const summary = describePool(r, cfg.server);
+      if (summary !== lastSummary) console.log(`\x1b[90m${new Date().toTimeString().slice(0, 8)}\x1b[0m ${summary}`);
+      lastSummary = summary;
       for (const a of (r.assignments ?? []) as Assignment[]) {
         running.set(a.pickId, play(a, n++).finally(() => running.delete(a.pickId)));
       }
@@ -121,4 +132,22 @@ export async function runPool(cfg: RunnerConfig, api: Api, skill: string, root: 
     console.log(error ? `✗ ${a.name}: ${error}` : `✓ ${a.name} finished ${a.gameId}`);
     await api.req('POST', '/api/admin/pool/finish', { pickId: a.pickId, error }).catch(() => {});
   }
+}
+
+/** One line (or a few) that says what the launcher is waiting for. Printed whenever it changes. */
+function describePool(r: any, server: string): string {
+  const waiting: string[] = r.waiting ?? [];
+  const busy: string[] = r.busy ?? [];
+  const lobbies: { id: string; players: number; seats: number; free: number }[] = r.lobbies ?? [];
+  const lines: string[] = [];
+  lines.push(`Waiting list: ${waiting.length ? waiting.join(', ') : '(empty)'}${busy.length ? ` | playing: ${busy.join(', ')}` : ''}`);
+  if (!waiting.length && !busy.length) lines.push(`   → add players on ${server.replace(/\/$/, '')}/players (click + next to a model)`);
+  if (lobbies.length) {
+    lines.push(`   open lobbies: ${lobbies.map((l) => `${l.id} ${l.players}/${l.seats || '∞'}${l.seats ? ` (${l.free} free)` : ''}`).join(', ')}`);
+  } else if (waiting.length) {
+    lines.push('   → no open lobby: create one on the Games page (keep "AI players from the waiting list may join" checked)');
+  }
+  if (r.closedLobbies?.length) lines.push(`   lobbies closed to the waiting list: ${r.closedLobbies.join(', ')}`);
+  for (const e of r.errors ?? []) lines.push(`   ✗ ${e}  (Retry on the AI players page)`);
+  return lines.join('\n');
 }

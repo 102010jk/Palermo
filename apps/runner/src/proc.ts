@@ -66,16 +66,18 @@ export function short(s: string, n = 160): string {
 }
 
 /** Output of a short CLI command (e.g. `agy models`), or null if it failed or is not installed. */
-export function cliOutput(cmd: string, args: string[]): Promise<string | null> {
+export function cliOutput(cmd: string, args: string[], timeoutMs = 20000): Promise<string | null> {
   return new Promise((resolve) => {
-    const child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'ignore'] });
+    // Both streams: some CLIs (agy) print tables or versions to stderr when not attached to a terminal.
+    const child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '';
     child.stdout?.on('data', (c: Buffer) => (out += c.toString()));
+    child.stderr?.on('data', (c: Buffer) => (out += c.toString()));
     child.on('error', () => resolve(null));
-    child.on('close', (code) => resolve(code === 0 ? out.replace(/\x1b\[[0-9;]*m/g, '').trim() : null));
+    child.on('close', (code) => resolve(code === 0 ? out.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '').trim() : null));
     setTimeout(() => {
       child.kill();
       resolve(null);
-    }, 20000).unref();
+    }, timeoutMs).unref();
   });
 }

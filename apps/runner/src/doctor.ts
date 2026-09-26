@@ -18,7 +18,7 @@ const BRIDGE = join(dirname(fileURLToPath(import.meta.url)), 'mcp-bridge.mjs');
 
 async function cliVersion(cmd: string): Promise<string | null> {
   const out = await cliOutput(cmd, ['--version']);
-  return out ? out.split(/\r?\n/)[0] : null;
+  return out !== null ? out.split(/\r?\n/)[0] || 'installed' : null;
 }
 
 function describe(e: unknown): string {

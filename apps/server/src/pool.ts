@@ -164,7 +164,7 @@ export class AgentPool {
    * Launcher heartbeat. `running` are the picks it is still playing; anything else marked as playing is over.
    * Returns new seat assignments for it to launch.
    */
-  hello(input: { host: string; catalog?: CatalogEntry[]; running?: string[] }): { assignments: Assignment[] } {
+  hello(input: { host: string; catalog?: CatalogEntry[]; running?: string[] }) {
     this.launcher = { host: String(input.host ?? '?').slice(0, 60), lastSeen: Date.now() };
     if (Array.isArray(input.catalog) && input.catalog.length) this.catalog = input.catalog.slice(0, 300);
     const running = new Set(input.running ?? []);
@@ -192,7 +192,19 @@ export class AgentPool {
       }
     }
     if (assignments.length) this.save();
-    return { assignments };
+    // A readable summary for the launcher window.
+    const closed = this.manager
+      .liveGames()
+      .filter((g) => g.state.phase === 'lobby' && !g.state.aborted && g.settings.aiPool === false)
+      .map((g) => g.state.id);
+    return {
+      assignments,
+      waiting: this.picks.filter((p) => p.status === 'waiting').map((p) => p.name),
+      busy: this.picks.filter((p) => p.status === 'joining' || p.status === 'playing').map((p) => `${p.name} (${p.gameId})`),
+      errors: this.picks.filter((p) => p.status === 'error').map((p) => `${p.name}: ${p.error}`),
+      lobbies: this.openLobbies().map((g) => this.lobbyInfo(g)),
+      closedLobbies: closed,
+    };
   }
 
   /** The launcher reports that an agent stopped (game over, or it could not play). */
