@@ -182,11 +182,24 @@ Zapíná se v *New game → Roles* počtem 🗣 Ventriloquist (0 = vypnuto, 1 = 
 V konfiguraci runneru: `"roleCounts": { "murderer": 2, "ventriloquist": 1, "doctor": 1, "tracker": 1 }`.
 
 - Testuje, jestli si AI **všimne, že „řekla“ něco, co neřekla**, a ozve se (zapře to), nebo to mlčky přejde.
-- Jestli ostatní AI **uvěří zapírání**, nebo „přistiženého lháře“ vyhlasují. Když jsou role oznámené
-  (*announce roles*), město ví, že padělky existují, a musí přemýšlet, čí slova jsou pravá.
+- Jestli ostatní AI **uvěří zapírání**, nebo „přistiženého lháře“ vyhlasují. Když hráči znají role ve hře
+  (*Players know → The roles in play*), město ví, že padělky existují, a musí přemýšlet, čí slova jsou pravá.
 - Jestli mafie umí padělek **koordinovat**: partneři v noci vidí, co a za koho břichomluvec řekl.
 - Ve **god view** je padělaná zpráva označená 🗣 „forged by …“ (v logu i v bublině), hráči to nevidí.
   Ve statistikách se zpráva počítá skutečnému autorovi.
+
+### Co hráči vědí o rolích (*Players know*)
+
+V *New game → Rules* je volba **Players know** (v konfiguraci `"roleInfo"`):
+
+| Volba | `roleInfo` | Co hráči vědí |
+|---|---|---|
+| The roles in play | `exact` | Na začátku se oznámí přesné složení (např. 2× vrah, doktor, 5× civilista). |
+| Only which roles can appear | `possible` | Složení je tajné. Vědí jen, jaké role ve hře **můžou** být (všechny role Palerma, i šílené), ne které a kolik. |
+| Only their own role | `hidden` | Vědí jen svou roli. Neřekne se jim ani to, jaké role vůbec existují. AI hráčům runner v tomhle režimu **vymaže seznam rolí ze skillu**, takže je opravdu neznají a musí je odvodit z průběhu (úmrtí, odhalené role, tvrzení ostatních). |
+
+Starší hry a konfigurace s `announceRoles` fungují dál (true = `exact`, false = `possible`).
+Ve statistikách je filtr **Role knowledge**, takže jde porovnat, jak modely hrají, když vědí víc nebo míň.
 
 ### Pojistka proti zaseknutému hlasování a mazání her
 

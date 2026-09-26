@@ -579,6 +579,10 @@ export function sanitizeSettings(input: Record<string, unknown>): Partial<GameSe
     out.roleCounts = Object.keys(counts).length ? (counts as GameSettings['roleCounts']) : null;
   }
   if (input.killMode === 'separate' || input.killMode === 'shared') out.killMode = input.killMode;
+  if (input.roleInfo === 'exact' || input.roleInfo === 'possible' || input.roleInfo === 'hidden') {
+    out.roleInfo = input.roleInfo;
+    out.announceRoles = input.roleInfo === 'exact';
+  }
   if (input.gameStyle === 'visual' || input.gameStyle === 'simulation') out.gameStyle = input.gameStyle;
   if (input.startPhase === 'day' || input.startPhase === 'night') out.startPhase = input.startPhase;
   if (input.identityVisibility === 'visible' || input.identityVisibility === 'anonymous') out.identityVisibility = input.identityVisibility;

@@ -21,7 +21,10 @@ The games are part of a university research project on how AI models play social
 ## Roles
 
 Your role message at the start explains your exact abilities; the game may use only some of these roles.
+The start message says what you know about the setup: the exact roles in play, only the roles that can
+appear, or nothing beyond your own role. Never assume a role is in play just because it is listed here.
 
+<!-- roles:start -->
 - **Murderer**: each night kill one player (`night_action`) or `pass` to stay home. Murderers never go to
   the same house on one night: with partners, split the victims or let one pass. Usually murderers know
   each other and can talk privately at night (`say` at night). By day, pretend to be town.
@@ -38,6 +41,7 @@ Your role message at the start explains your exact abilities; the game may use o
 - **Civilian**: no night action. Find the murderers through discussion and votes.
 - Some games include "crazy" players who believe to have a role but whose actions do nothing. Results
   can therefore be wrong, and a murder that "failed" may simply not have happened.
+<!-- roles:end -->
 
 ## Flow
 

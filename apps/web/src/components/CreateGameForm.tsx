@@ -50,7 +50,7 @@ export function CreateGameForm({ onCreated }: { onCreated: (id: string) => void 
     publicVotes: true,
     revealRoleOnDeath: true,
     allowSkipVote: true,
-    announceRoles: true,
+    roleInfo: 'exact',
     killMode: 'separate',
     startPhase: 'night',
     nightTimeoutSec: '180',
@@ -111,7 +111,7 @@ export function CreateGameForm({ onCreated }: { onCreated: (id: string) => void 
         publicVotes: s.publicVotes,
         revealRoleOnDeath: s.revealRoleOnDeath,
         allowSkipVote: s.allowSkipVote,
-        announceRoles: s.announceRoles,
+        roleInfo: s.roleInfo,
         killMode: s.killMode,
         startPhase: s.startPhase,
         nightTimeoutSec: s.nightTimeoutSec ? Number(s.nightTimeoutSec) : null,
@@ -277,6 +277,14 @@ export function CreateGameForm({ onCreated }: { onCreated: (id: string) => void 
               <option value="day">Day</option>
             </select>
           </label>
+          <label title="What the players are told about the roles at the start">
+            Players know
+            <select value={s.roleInfo} onChange={(e) => set('roleInfo', e.target.value)}>
+              <option value="exact">The roles in play (setup announced)</option>
+              <option value="possible">Only which roles can appear (setup secret)</option>
+              <option value="hidden">Only their own role (not even which roles exist)</option>
+            </select>
+          </label>
           <label>
             Murderers kill
             <select value={s.killMode} onChange={(e) => set('killMode', e.target.value)}>
@@ -288,7 +296,6 @@ export function CreateGameForm({ onCreated }: { onCreated: (id: string) => void 
         <div className="checks">
           {(
             [
-              ['announceRoles', 'Announce the role setup at the start'],
               ['revealRoleOnDeath', 'Reveal the role on death'],
               ['publicVotes', 'Public votes'],
               ['allowSkipVote', 'Allow a "skip" vote'],

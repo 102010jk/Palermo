@@ -1,4 +1,4 @@
-import type { DayActionKind, GameSettings, NightActionKind, RoleId, Team } from './types.ts';
+import type { DayActionKind, GameSettings, NightActionKind, RoleId, RoleInfo, Team } from './types.ts';
 
 export interface RoleDef {
   id: RoleId;
@@ -205,6 +205,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   maxRounds: 15,
   minPlayers: 3,
   announceRoles: true,
+  roleInfo: null,
   maxMessageLength: null,
   maxMessagesPerPhase: null,
   chatCooldownSec: null,
@@ -213,4 +214,16 @@ export const DEFAULT_SETTINGS: GameSettings = {
   seats: 0,
   aiPool: true,
   series: null,
+};
+
+/** What players are told about the roles in a game (see GameSettings.roleInfo). */
+export function roleInfoOf(settings: Partial<Pick<GameSettings, 'roleInfo' | 'announceRoles'>> | null | undefined): RoleInfo {
+  if (settings?.roleInfo === 'exact' || settings?.roleInfo === 'possible' || settings?.roleInfo === 'hidden') return settings.roleInfo;
+  return settings?.announceRoles === false ? 'possible' : 'exact';
+}
+
+export const ROLE_INFO_LABEL: Record<RoleInfo, string> = {
+  exact: 'Setup announced',
+  possible: 'Only possible roles',
+  hidden: 'Only own role',
 };

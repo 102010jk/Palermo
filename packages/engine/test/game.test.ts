@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Game, GameError, botDecide, defaultRoles, type GameSettings, type RoleId } from '../src/index.ts';
+import { Game, GameError, botDecide, defaultRoles, roleInfoOf, type GameSettings, type RoleId } from '../src/index.ts';
 
 function setup(roles: RoleId[], settings: Partial<GameSettings> = {}) {
   let t = 1000;
@@ -56,6 +56,35 @@ describe('start', () => {
     const start = g.eventsFor('p0').find((e) => e.type === 'game_started')!;
     expect(start.text).toContain('secret');
     expect(start.data.roles).toBeUndefined();
+  });
+});
+
+describe('role knowledge (roleInfo)', () => {
+  const roles = ['murderer', 'doctor', 'civilian', 'civilian'] as const;
+  const startText = (settings: Record<string, unknown>) => {
+    const { g } = setup([...roles], settings);
+    return g.eventsFor('p0').find((e) => e.type === 'game_started')!;
+  };
+  it('exact: announces the setup in play', () => {
+    const e = startText({ roleInfo: 'exact' });
+    expect(e.text).toContain('Roles in play: ');
+    expect(e.data.roles).toEqual({ murderer: 1, doctor: 1, civilian: 2 });
+  });
+  it('possible: lists the roles that can appear, not the setup', () => {
+    const e = startText({ roleInfo: 'possible' });
+    expect(e.text).toMatch(/Roles that can appear in this town: .*Trapper.*Ventriloquist/);
+    expect(e.data.roles).toBeUndefined();
+  });
+  it('hidden: only the own role, not even which roles exist', () => {
+    const { g } = setup([...roles], { roleInfo: 'hidden' });
+    const e = g.eventsFor('p0').find((x) => x.type === 'game_started')!;
+    expect(e.text).toMatch(/only know your own role/);
+    expect(e.text).not.toMatch(/Trapper|Doctor|Murderer/);
+    expect(g.eventsFor('p0').find((x) => x.type === 'role_assigned')!.text).toMatch(/only examples/);
+  });
+  it('old games without roleInfo follow announceRoles', () => {
+    expect(roleInfoOf({ announceRoles: false, roleInfo: null })).toBe('possible');
+    expect(roleInfoOf({ announceRoles: true })).toBe('exact');
   });
 });
 

@@ -14,7 +14,8 @@ import { claudeAdapter } from './adapters/claude.ts';
 import { codexAdapter } from './adapters/codex.ts';
 import { agyAdapter } from './adapters/agy.ts';
 import { geminiAdapter } from './adapters/gemini.ts';
-import { continuePrompt, loadSkill, reportPrompt, startPrompt } from './prompt.ts';
+import { roleInfoOf } from '@palermo/engine';
+import { continuePrompt, loadSkill, reportPrompt, skillForGame, startPrompt } from './prompt.ts';
 import { PROVIDER_NAME, type Adapter, type AgentContext, type AgentSpec } from './types.ts';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -179,6 +180,9 @@ export async function launchAgent(o: LaunchOptions): Promise<string | undefined>
   const workdir = join(o.runDir, spec.name.replace(/[^\w.-]/g, '_'));
   mkdirSync(workdir, { recursive: true });
   const logFile = join(workdir, 'agent.log');
+  // In games where players only know their own role, the skill must not list the roles either.
+  const settings = (await api.game(o.gameId).catch(() => null))?.view?.settings;
+  const skill = skillForGame(o.skill, roleInfoOf(settings));
   const ctx: AgentContext = {
     spec,
     serverUrl: o.cfg.server,
@@ -187,7 +191,7 @@ export async function launchAgent(o: LaunchOptions): Promise<string | undefined>
     gameId: o.gameId,
     workdir,
     freedomMode: o.freedomMode,
-    skill: o.skill,
+    skill,
     signal: o.signal,
     accountId: o.accountId,
     resuming: o.resuming,

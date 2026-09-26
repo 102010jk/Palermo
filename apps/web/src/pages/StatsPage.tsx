@@ -54,7 +54,7 @@ const FILTERS: { key: string; label: string; wide?: boolean }[] = [
   { key: 'startPhase', label: 'Starts with' },
   { key: 'revealRoleOnDeath', label: 'Role reveal' },
   { key: 'publicVotes', label: 'Public votes' },
-  { key: 'announceRoles', label: 'Roles announced' },
+  { key: 'roleInfo', label: 'Role knowledge' },
   { key: 'maxMessageLength', label: 'Max msg length' },
   { key: 'maxMessagesPerPhase', label: 'Msgs per day' },
   { key: 'chatCooldownSec', label: 'Chat cooldown' },

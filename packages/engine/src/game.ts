@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, ROLES, apparentRole, isCrazy, rolesFor, teamOf } from './roles.ts';
+import { DEFAULT_SETTINGS, ROLES, ROLE_ORDER, apparentRole, isCrazy, roleInfoOf, rolesFor, teamOf } from './roles.ts';
 import { pick, shuffle } from './rng.ts';
 import type {
   EventType,
@@ -268,10 +268,12 @@ export class Game {
         'game_started',
         { scope: 'public' },
         `The game begins with ${s.players.length} players: ${s.players.map((p) => p.publicName).join(', ')}. ` +
-          (this.settings.announceRoles
-            ? `Roles in play: ${summarizeRoles(roles.map(apparentRole))}.`
-            : 'The role setup is secret: nobody knows how many of each role are in play.'),
-        { players: s.players.map((p) => p.publicName), roles: this.settings.announceRoles ? countRoles(roles.map(apparentRole)) : undefined },
+          this.roleInfoText(roles),
+        {
+          players: s.players.map((p) => p.publicName),
+          roleInfo: roleInfoOf(this.settings),
+          roles: roleInfoOf(this.settings) === 'exact' ? countRoles(roles.map(apparentRole)) : undefined,
+        },
       ),
     );
 
@@ -285,6 +287,9 @@ export class Game {
       if (mateList.length) text += ` Your mafia partners: ${mateList.join(', ')}.`;
       if (shown === 'murderer' && lone) {
         text += ' This game the murderers work alone: you do not know the other murderers (if any) and there is no private murderer chat.';
+      }
+      if (roleInfoOf(this.settings) === 'hidden') {
+        text += ' (Other roles named in this text are only examples: you are not told which roles are in play.)';
       }
       if (shown === 'ventriloquist' && lone) {
         text += ' This game the mafia works alone: you do not know the murderers and there is no private night chat.';
@@ -307,6 +312,26 @@ export class Game {
   /** With a crazy murderer in play, the murderers do not know each other (otherwise the crazy one would stand out). */
   loneWolves(): boolean {
     return this.state.players.some((p) => p.role === 'crazy_murderer');
+  }
+
+  /** The start announcement about roles, depending on GameSettings.roleInfo. */
+  private roleInfoText(roles: RoleId[]): string {
+    switch (roleInfoOf(this.settings)) {
+      case 'exact':
+        return `Roles in play: ${summarizeRoles(roles.map(apparentRole))}.`;
+      case 'possible': {
+        const possible = ROLE_ORDER.filter((r) => !isCrazy(r)).map((r) => ROLES[r].name);
+        return (
+          `The role setup is secret. Roles that can appear in this town: ${possible.join(', ')}. ` +
+          'Any of them may or may not be in play, in any number, and some players may be "crazy" (they believe to have a role, but their actions do nothing).'
+        );
+      }
+      case 'hidden':
+        return (
+          'You only know your own role. Nobody is told which other roles exist in this game or how many there are: ' +
+          'work it out from what happens (deaths, claims, revealed roles).'
+        );
+    }
   }
 
   /** Mafia members (murderers, ventriloquist) who know (and can talk to) each other. */

@@ -1,4 +1,4 @@
-import { ROLE_ORDER, ROLES, teamOf, type GameSettings, type RoleId } from '@palermo/engine';
+import { ROLE_INFO_LABEL, ROLE_ORDER, ROLES, roleInfoOf, teamOf, type GameSettings, type RoleId } from '@palermo/engine';
 import type { Db } from './db.ts';
 
 const isMafia = (role: string | undefined) => !!role && teamOf(role as RoleId) === 'mafia';
@@ -120,7 +120,12 @@ export function computeStats(db: Db, filter: StatsFilter = { settings: {} }): St
       !(JSON.parse(g.state as string) as { aborted?: boolean }).aborted &&
       (playersStmt.all(g.id as string) as Row[]).some((p) => !isBot(p as never)),
   );
-  const derivedOf = new Map(allEnded.map((g) => [g.id as string, lineupOf(playersStmt.all(g.id as string) as Row[])]));
+  const derivedOf = new Map(
+    allEnded.map((g) => [
+      g.id as string,
+      { ...lineupOf(playersStmt.all(g.id as string) as Row[]), roleInfo: ROLE_INFO_LABEL[roleInfoOf(JSON.parse(g.settings as string))] },
+    ]),
+  );
 
   const settingValues: Record<string, Set<string>> = {};
   for (const g of allEnded) {

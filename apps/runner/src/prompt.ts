@@ -7,6 +7,19 @@ export function loadSkill(path: string): string {
   return readFileSync(path, 'utf8').replace(/^---[\s\S]*?---\s*/, '');
 }
 
+/**
+ * The skill for one game. In 'hidden' role-info games the list of roles is removed, so the player really knows
+ * only its own role (the start message and its role message still explain that).
+ */
+export function skillForGame(skill: string, roleInfo: string): string {
+  if (roleInfo !== 'hidden') return skill.replace(/<!-- roles:(start|end) -->\n?/g, '');
+  return skill.replace(
+    /<!-- roles:start -->[\s\S]*?<!-- roles:end -->\n?/,
+    'In this game you are NOT told which roles exist. Your role message explains your own role; work out the rest ' +
+      'from what happens (deaths, revealed roles, claims). Tools for abilities you do not have will just fail.\n',
+  );
+}
+
 export function startPrompt(ctx: AgentContext): string {
   const { spec } = ctx;
   return [

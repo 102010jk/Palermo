@@ -275,7 +275,8 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
     'shoot',
     {
       description:
-        'Gunman only, during the day: fire your single bullet at a player. They die at once and everyone learns you are the Gunman.',
+        'Only if your role message says you have a gun: during the day, fire your single bullet at a player. ' +
+        'They die at once and everyone learns you are the Gunman.',
       inputSchema: { target: z.string().min(1).max(40), thought },
       annotations: { destructiveHint: false },
     },
@@ -290,7 +291,7 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
     'throw_voice',
     {
       description:
-        'Ventriloquist only, once per day: post a public chat message that appears to come from another living player ' +
+        'Only if your role message gives you this ability, once per day: post a public chat message that appears to come from another living player ' +
         '(`as` = their name). Nobody can tell it is forged, but that player also reads it and may deny it. ' +
         'It counts against your own chat limits.',
       inputSchema: { as: z.string().min(1).max(40), message: z.string().min(1).max(2000), thought },

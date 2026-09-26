@@ -18,6 +18,8 @@ export type Winner = Team | 'draw';
 /** What a night role does when it acts. New roles plug in by adding a kind here and handling it in resolveNight. */
 export type NightActionKind = 'kill' | 'protect' | 'track' | 'trap';
 /** Actions used during the day (the gunman's single shot). */
+export type RoleInfo = 'exact' | 'possible' | 'hidden';
+
 export type DayActionKind = 'shoot' | 'throw_voice';
 
 export interface GameSettings {
@@ -64,8 +66,14 @@ export interface GameSettings {
   /** Safety cap on rounds; the game ends in a draw after this. null = unlimited. */
   maxRounds: number | null;
   minPlayers: number;
-  /** Tell everyone at the start how many of each role are in play. */
+  /** Tell everyone at the start how many of each role are in play (legacy switch, see roleInfo). */
   announceRoles: boolean;
+  /**
+   * What players know about the roles: 'exact' = the setup in play is announced, 'possible' = only the list of roles
+   * that can appear, 'hidden' = only their own role (they are not even told which roles exist).
+   * null = from announceRoles (true -> exact, false -> possible).
+   */
+  roleInfo: RoleInfo | null;
   /** Chat limits (null = off). Max characters per message. */
   maxMessageLength: number | null;
   /** Max chat messages per player per phase (a day, or a night for the murderers' private chat). */
