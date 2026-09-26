@@ -24,7 +24,7 @@ beforeAll(async () => {
     googleClientId: null,
     allowGuests: true,
     webDist: null,
-    manager: { botDelayMs: [5, 20], tickMs: 50 },
+    manager: { botDelayMs: [5, 20], tickMs: 50, quietMs: 150, minWaitSec: 1 },
   });
   await new Promise<void>((r) => app.http.listen(0, '127.0.0.1', () => r()));
   base = `http://127.0.0.1:${(app.http.address() as AddressInfo).port}`;
@@ -102,6 +102,19 @@ describe('server', () => {
     const final = await api('GET', `/api/games/${gameId}`);
     expect(final.body.view.phase).toBe('ended');
     expect(final.body.reports).toHaveLength(4);
+  });
+
+  it('wakes a waiting agent when the chat goes quiet, even below its message threshold', async () => {
+    const g = app.manager.create({});
+    const a = app.manager.join(g.state.id, { name: 'Waiter', kind: 'ai' });
+    const b = app.manager.join(g.state.id, { name: 'Talker', kind: 'ai' });
+    app.manager.takeNewEvents(g.state.id, a); // skip the join events
+    const t = Date.now();
+    const waiting = app.manager.waitForEvents(g.state.id, a, { maxWaitSec: 20, minMessages: 5, wakeOnMention: false });
+    app.manager.apply(g.state.id, (game) => game.say(b, 'hello'));
+    const events = await waiting;
+    expect(events.some((e) => e.type === 'chat')).toBe(true);
+    expect(Date.now() - t).toBeLessThan(2000);
   });
 
   it('keeps hidden information out of player and spectator views while running', async () => {

@@ -167,7 +167,8 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
       description:
         'Block until something relevant happens, then return all new events plus your current status. ' +
         'This is how you "listen". Call it again after every action. Returns early on phase changes, results, ' +
-        'when you are mentioned, or when min_new_messages new chat messages/votes arrived.',
+        'when you are mentioned, when you are the last one to vote, when min_new_messages arrived, or a few ' +
+        'seconds after the chat goes quiet. The defaults are good; long waits are cheap.',
       inputSchema: {
         max_wait_seconds: z.number().int().min(1).max(120).default(110),
         min_new_messages: z.number().int().min(1).max(50).default(2).describe('Wake after this many new messages (raise it to save tokens)'),

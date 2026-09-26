@@ -21,6 +21,8 @@ interface Waiter {
   opts: WaitOptions;
   resolve: (events: GameEvent[]) => void;
   timer: NodeJS.Timeout;
+  /** Fires when new messages arrived but the chat then went quiet. */
+  quiet?: NodeJS.Timeout;
 }
 
 interface Live {
@@ -38,6 +40,10 @@ const CHATTY = new Set(['chat', 'team_chat', 'vote', 'thought', 'player_ready', 
 export interface ManagerOptions {
   botDelayMs?: [number, number];
   tickMs?: number;
+  /** Wake a waiting agent this long after the last new message, even below its message threshold. */
+  quietMs?: number;
+  /** Floor for max_wait_seconds, so agents do not burn steps on near-empty waits. */
+  minWaitSec?: number;
 }
 
 /**
@@ -48,11 +54,15 @@ export class GameManager extends EventEmitter {
   private live = new Map<string, Live>();
   private tickTimer: NodeJS.Timeout | null = null;
   private botDelay: [number, number];
+  private quietMs: number;
+  private minWaitSec: number;
 
   constructor(private db: Db, opts: ManagerOptions = {}) {
     super();
     this.setMaxListeners(0);
     this.botDelay = opts.botDelayMs ?? [700, 2500];
+    this.quietMs = opts.quietMs ?? 6000;
+    this.minWaitSec = opts.minWaitSec ?? 15;
     for (const id of db.unfinishedGameIds()) {
       const state = db.loadGameState(id);
       if (state) this.live.set(id, this.wrap(Game.fromState(state)));
@@ -288,6 +298,10 @@ export class GameManager extends EventEmitter {
     for (const e of events) {
       if (!CHATTY.has(e.type)) return true; // phase changes, results, deaths, role info...
       if (e.type === 'chat' || e.type === 'team_chat' || e.type === 'vote') messages++;
+      // Everyone else has voted and the day waits for this player: wake them now.
+      if (e.type === 'vote' && me && g.state.phase === 'day' && !g.state.votes[me.id]) {
+        if (Object.keys(g.state.votes).length >= g.alive().length - 1) return true;
+      }
       if (w.opts.wakeOnMention && me && (e.type === 'chat' || e.type === 'team_chat')) {
         const msg = String(e.data.message ?? '');
         const re = new RegExp(`(^|[^\\p{L}])@?${escapeRe(me.publicName)}([^\\p{L}]|$)`, 'iu');
@@ -298,14 +312,26 @@ export class GameManager extends EventEmitter {
   }
 
   private wake(l: Live): void {
-    for (const w of [...l.waiters]) {
-      const pending = this.takeNewEvents(l.game.state.id, w.playerId, false);
-      if (this.shouldWake(l.game, w, pending)) this.finishWait(l, w);
+    for (const w of [...l.waiters]) this.check(l, w);
+  }
+
+  /** Wake now if warranted; otherwise, if messages are pending, wake once the chat has been quiet for a moment. */
+  private check(l: Live, w: Waiter): void {
+    const g = l.game;
+    const pending = this.takeNewEvents(g.state.id, w.playerId, false);
+    if (this.shouldWake(g, w, pending)) return this.finishWait(l, w);
+    const me = g.player(w.playerId);
+    const deadWatcher = me && !me.alive && g.state.phase !== 'lobby';
+    if (!deadWatcher && pending.some((e) => e.type === 'chat' || e.type === 'team_chat' || e.type === 'vote')) {
+      if (w.quiet) clearTimeout(w.quiet);
+      w.quiet = setTimeout(() => this.finishWait(l, w), this.quietMs);
     }
   }
 
   private finishWait(l: Live, w: Waiter): void {
+    if (!l.waiters.has(w)) return;
     clearTimeout(w.timer);
+    if (w.quiet) clearTimeout(w.quiet);
     l.waiters.delete(w);
     w.resolve(this.takeNewEvents(l.game.state.id, w.playerId, true));
   }
@@ -314,7 +340,7 @@ export class GameManager extends EventEmitter {
     const l = this.live.get(gameId);
     if (!l) return Promise.resolve(this.takeNewEvents(gameId, playerId));
     const me = l.game.player(playerId);
-    if (me && !me.alive) opts = { ...opts, maxWaitSec: Math.max(opts.maxWaitSec, 110) };
+    opts = { ...opts, maxWaitSec: Math.max(opts.maxWaitSec, me && !me.alive ? 110 : this.minWaitSec) };
     // Only one outstanding wait per player.
     for (const w of [...l.waiters]) if (w.playerId === playerId) this.finishWait(l, w);
     return new Promise((resolve) => {
@@ -325,8 +351,7 @@ export class GameManager extends EventEmitter {
         timer: setTimeout(() => this.finishWait(l, w), Math.max(1, opts.maxWaitSec) * 1000),
       };
       l.waiters.add(w);
-      const pending = this.takeNewEvents(gameId, playerId, false);
-      if (this.shouldWake(l.game, w, pending)) this.finishWait(l, w);
+      this.check(l, w);
     });
   }
 }

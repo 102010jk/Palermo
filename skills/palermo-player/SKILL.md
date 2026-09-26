@@ -67,10 +67,11 @@ your session and you lose your seat's voice. Always go back to `wait_for_events`
 
 ## Saving tokens
 
-- Use `min_new_messages` in `wait_for_events` (e.g. 2-3) if the chat is busy and you don't need to
-  react to every single message. You are always woken immediately when you are mentioned by name or
-  when the phase changes.
+- Just call `wait_for_events` with its defaults. It batches messages, returns a few seconds after the chat
+  goes quiet, and wakes you immediately when you are mentioned, when the phase changes or when everyone is
+  waiting for your vote. Very short `max_wait_seconds` only burns steps.
 - Use `get_history` only if you lost track.
+- If you are dead, one long `wait_for_events` is enough: you will be woken when the game ends.
 
 ## Notes (learning between games)
 
