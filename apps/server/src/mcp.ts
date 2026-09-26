@@ -64,13 +64,23 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
     return { game, playerId };
   };
 
+  // Tool annotations let clients (e.g. Codex) run the game tools without asking: none of them touches the
+  // player's machine or the outside world, and the reading ones change nothing.
+  const READ_ONLY = new Set(['list_games', 'wait_for_events', 'get_state', 'get_history', 'get_notes']);
+  const registerTool = ((name: string, config: { annotations?: object }, cb: unknown) =>
+    (server.registerTool as any)(
+      name,
+      { ...config, annotations: { readOnlyHint: READ_ONLY.has(name), destructiveHint: false, openWorldHint: false, ...config.annotations } },
+      cb,
+    )) as typeof server.registerTool;
+
   const lobbies = () =>
     manager
       .liveGames()
       .filter((g) => g.state.phase === 'lobby')
       .map((g) => `${g.state.id} (${g.settings.mode}, ${g.state.players.length} joined${g.settings.seats ? `/${g.settings.seats}` : ''})`);
 
-  server.registerTool(
+  registerTool(
     'login',
     {
       description: 'Log in to the Palermo server. Must be the first call. Report which model you are.',
@@ -105,7 +115,7 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
     }, false),
   );
 
-  server.registerTool(
+  registerTool(
     'list_games',
     { description: 'List games you can join (lobbies) and games in progress.', inputSchema: {} },
     guard(async () => {
@@ -119,7 +129,7 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
     }),
   );
 
-  server.registerTool(
+  registerTool(
     'join_game',
     {
       description: 'Join a game lobby. Without game_id joins the only open lobby.',
@@ -141,7 +151,7 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
     }),
   );
 
-  server.registerTool(
+  registerTool(
     'set_ready',
     { description: 'Mark yourself ready (or not ready) in the lobby.', inputSchema: { ready: z.boolean().default(true) } },
     guard(async ({ ready }: { ready?: boolean }) => {
@@ -151,7 +161,7 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
     }),
   );
 
-  server.registerTool(
+  registerTool(
     'leave_game',
     { description: 'Leave a lobby before the game starts.', inputSchema: {} },
     guard(async () => {
@@ -161,7 +171,7 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
     }),
   );
 
-  server.registerTool(
+  registerTool(
     'wait_for_events',
     {
       description:
@@ -186,7 +196,7 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
     }),
   );
 
-  server.registerTool(
+  registerTool(
     'get_state',
     { description: 'Your current status (role, alive players, votes, what you should do). Does not wait.', inputSchema: {} },
     guard(async () => {
@@ -195,7 +205,7 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
     }),
   );
 
-  server.registerTool(
+  registerTool(
     'get_history',
     {
       description: 'Everything you have seen in this game so far (or the last N events). Use only if you lost track.',
@@ -210,7 +220,7 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
 
   const thought = z.string().max(2000).optional().describe('Your private reasoning. Only the game master sees it.');
 
-  server.registerTool(
+  registerTool(
     'say',
     {
       description: 'Send a chat message. Day: everyone reads it. Night: only your fellow murderers (murderers only).',
@@ -223,7 +233,7 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
     }),
   );
 
-  server.registerTool(
+  registerTool(
     'vote',
     {
       description:
@@ -240,7 +250,7 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
     }),
   );
 
-  server.registerTool(
+  registerTool(
     'night_action',
     {
       description: 'Night only: use your role ability on a player (murderer: kill, doctor: protect, tracker: follow).',
@@ -253,7 +263,7 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
     }),
   );
 
-  server.registerTool(
+  registerTool(
     'get_notes',
     {
       description:
@@ -282,7 +292,7 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
     }),
   );
 
-  server.registerTool(
+  registerTool(
     'save_notes',
     {
       description:
@@ -298,7 +308,7 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
     }),
   );
 
-  server.registerTool(
+  registerTool(
     'submit_report',
     {
       description: 'After the game ends: submit your summary of the game and the lessons you learned.',

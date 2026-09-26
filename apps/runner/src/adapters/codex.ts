@@ -1,4 +1,5 @@
-import { writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { localPipeFor } from '../pipe.ts';
@@ -12,6 +13,44 @@ const toml = (s: string) => JSON.stringify(s);
 
 /** Built-in Codex capabilities switched off in rules mode, so the only way to act is the palermo MCP tools. */
 const RULES_MODE_DISABLED_FEATURES = ['shell_tool', 'browser_use', 'computer_use', 'in_app_browser', 'image_generation', 'apps'];
+
+/**
+ * Players run with their own CODEX_HOME that holds only the login (auth.json): the user's plugins (Browser Use,
+ * node_repl…), other MCP servers, memories and global AGENTS.md stay out of the game. The login is kept in sync
+ * both ways, so a token refreshed by either side keeps working.
+ */
+const USER_CODEX_HOME = process.env.CODEX_HOME || join(homedir(), '.codex');
+const PLAYER_CODEX_HOME = join(homedir(), '.palermo', 'codex-home');
+
+function newer(src: string, dst: string): boolean {
+  if (!existsSync(src)) return false;
+  if (!existsSync(dst)) return true;
+  return statSync(src).mtimeMs > statSync(dst).mtimeMs && readFileSync(src, 'utf8') !== readFileSync(dst, 'utf8');
+}
+
+/** Returns the CODEX_HOME for players, or undefined when the login is not in a file (then the user's home is used). */
+function playerCodexHome(ctx: AgentContext): string | undefined {
+  const userAuth = join(USER_CODEX_HOME, 'auth.json');
+  if (!existsSync(userAuth)) {
+    ctx.log(`note: ${userAuth} not found, using your normal Codex setup (plugins included)`);
+    return undefined;
+  }
+  mkdirSync(PLAYER_CODEX_HOME, { recursive: true });
+  const playerAuth = join(PLAYER_CODEX_HOME, 'auth.json');
+  if (newer(userAuth, playerAuth)) copyFileSync(userAuth, playerAuth);
+  return PLAYER_CODEX_HOME;
+}
+
+function syncLoginBack(home: string | undefined): void {
+  if (!home) return;
+  const playerAuth = join(home, 'auth.json');
+  const userAuth = join(USER_CODEX_HOME, 'auth.json');
+  try {
+    if (newer(playerAuth, userAuth)) copyFileSync(playerAuth, userAuth);
+  } catch {
+    // the user's Codex keeps its own login; nothing to do
+  }
+}
 
 const AUTH_ERROR = /401|unauthori[sz]ed|not logged in|codex login|missing bearer|invalid api key/i;
 
@@ -37,6 +76,8 @@ export const codexAdapter: Adapter = {
       '-c', `mcp_servers.palermo.env={${env.join(',')}}`,
       '-c', 'mcp_servers.palermo.tool_timeout_sec=300',
       '-c', 'mcp_servers.palermo.startup_timeout_sec=60',
+      // Without this, codex exec refuses every call to an unannotated MCP tool ("requires approval, but approval policy is never").
+      '-c', 'mcp_servers.palermo.default_tools_approval_mode="approve"',
       '-c', 'approval_policy="never"',
     );
     if (ctx.freedomMode) {
@@ -53,9 +94,11 @@ export const codexAdapter: Adapter = {
     const usage: Usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null, durationMs: null };
     let sid: string | undefined;
     let fatal: string | undefined;
+    const home = playerCodexHome(ctx);
     const started = Date.now();
     const code = await runProcess(ctx.spec.command ?? 'codex', args, {
       cwd: ctx.workdir,
+      env: home ? { CODEX_HOME: home } : {},
       onErr: (l) => {
         if (/WARNING: proceeding|Reading additional input/.test(l)) return;
         ctx.log(`stderr: ${short(l)}`);
@@ -75,7 +118,11 @@ export const codexAdapter: Adapter = {
           ctx.log(`🔧 ${item.tool} ${short(JSON.stringify(item.arguments ?? {}), 200)}`);
         }
         if (m.type === 'item.completed' && item.type === 'mcp_tool_call' && item.status === 'failed') {
-          ctx.log(`tool failed: ${short(JSON.stringify(item.error ?? item.result ?? {}), 300)}`);
+          const text = JSON.stringify(item.error ?? item.result ?? {});
+          ctx.log(`tool failed: ${short(text, 300)}`);
+          if (/requires approval/i.test(text) && item.server === 'palermo') {
+            fatal = 'Codex refused the palermo tools ("requires approval"). Update Codex (npm install -g @openai/codex) and send the log';
+          }
         }
         const u = m.usage;
         if (u && m.type === 'turn.completed') {
@@ -94,6 +141,7 @@ export const codexAdapter: Adapter = {
       },
     });
     usage.durationMs = Date.now() - started;
+    syncLoginBack(home);
     return { exitCode: code, sessionId: sid, usage, fatal };
   },
 };

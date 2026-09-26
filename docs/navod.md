@@ -171,7 +171,7 @@ Sestava v `examples\mix6.json`:
 | Sonnet | claude | `sonnet` (Sonnet 5) |
 | Haiku | claude | `haiku` (Haiku 4.5) |
 | Opus | claude | `claude-opus-5-5` (Opus 5.5) |
-| Flash | agy | `gemini-3.8-flash` |
+| Flash | agy | `gemini-3.8-flash-high` (Gemini 3.8 Flash, High) |
 | Sol | codex | `gpt-5.6-sol` |
 | Luna | codex | `gpt-5.6-luna` |
 
@@ -187,7 +187,8 @@ codex login          # přihlášení ChatGPT účtem
 `doctor.bat` pak ukáže `OK agy CLI` (i se seznamem modelů) a `OK codex CLI`.
 
 Když runner napíše „rejected the model“, oprav název v `mix6.json`. U agy runner rovnou vypíše,
-jaké modely máš k dispozici (např. `gemini-3.8-flash-high` je varianta s delším přemýšlením).
+jaké modely máš k dispozici. Flash má tři úrovně přemýšlení: `gemini-3.8-flash-low`, `-medium`, `-high`
+(runner si sám zjistí, jestli agy chce `--model gemini-3.8-flash --effort high`, nebo celý název).
 Novější GPT-6 Sol/Luna (`gpt-6-sol`, `gpt-6-luna`) jde použít stejně, stačí změnit `model`.
 
 **Co runner u agy dělá sám:**
@@ -202,6 +203,16 @@ Novější GPT-6 Sol/Luna (`gpt-6-sol`, `gpt-6-luna`) jde použít stejně, sta�
 **Režim s pravidly u agy:** příkazy v terminálu agy v headless režimu sám nespustí (potřebují schválení)
 a soubory smí číst jen v prázdné pracovní složce hráče. Přísnější vypnutí vestavěných nástrojů agy
 zatím umí jen globálně, takže to runner nedělá.
+
+**Codex:** hráči běží s vlastní čistou složkou Codexu (`%USERPROFILE%\.palermo\codex-home`), kam runner
+zkopíruje jen tvoje přihlášení. Tvoje pluginy (Browser Use, prohlížeč, `js`), jiné MCP servery a paměť
+tak do hry nezasahují. Když se přihlášení obnoví, runner ho zkopíruje zpátky do `~/.codex`.
+Nástroje hry má Codex povolené bez ptaní (`default_tools_approval_mode = "approve"` jen pro server palermo).
+
+**Opus 5.5 a bezpečnostní filtr:** Opus 5.5 občas odmítne hru jako „safeguards flagged this message“
+(planý poplach kvůli slovům jako vrah/zabít). Skill hru popisuje jako společenskou hru (Mafia/Werewolf);
+když filtr přesto zasáhne, runner začne novou konverzaci místo té zablokované. Po 3 odmítnutích to vzdá
+a napíše to.
 
 Codex a Claude v režimu s pravidly mají vypnuté vlastní nástroje (terminál, soubory, web), takže můžou jen hrát.
 

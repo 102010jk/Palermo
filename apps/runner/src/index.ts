@@ -51,6 +51,7 @@ const COLORS = [36, 33, 35, 32, 34, 91, 92, 93, 94, 95, 96];
 async function runAgent(ctx: AgentContext, adapter: Adapter): Promise<string | undefined> {
   const maxRestarts = ctx.spec.maxRestarts ?? 5;
   let resumeId: string | undefined;
+  let blockedRuns = 0;
   for (let attempt = 0; attempt <= maxRestarts; attempt++) {
     let prompt = startPrompt(ctx);
     if (attempt > 0) {
@@ -60,11 +61,19 @@ async function runAgent(ctx: AgentContext, adapter: Adapter): Promise<string | u
       const reported = (state?.reports ?? []).some((r: any) => r.player_id === me);
       if (ended && reported) break;
       if (ended) prompt = reportPrompt(ctx);
-      else prompt = continuePrompt(ctx);
-      ctx.log(`relaunching (attempt ${attempt}) – ${ended ? 'writing report' : 'game still running'}`);
+      else if (me) prompt = continuePrompt(ctx);
+      ctx.log(`relaunching (attempt ${attempt}) – ${ended ? 'writing report' : me ? 'game still running' : 'not seated yet'}`);
     }
     const res = await adapter.run(ctx, { attempt, prompt, resumeId });
     resumeId = res.sessionId ?? resumeId;
+    if (res.blocked) {
+      blockedRuns++;
+      resumeId = undefined; // a refused conversation stays refused: start a new one
+      ctx.log(`⚠️  the model's safety filter refused the conversation (${blockedRuns}×); next try starts a new session`);
+      if (blockedRuns >= 3) {
+        return `${ctx.spec.name}: the safety filter of ${ctx.spec.model ?? 'the model'} keeps refusing the game (${res.blocked})`;
+      }
+    }
     if (res.usage) {
       await ctx.api
         .usage({ gameId: ctx.gameId, model: ctx.spec.model, source: ctx.spec.provider, ...res.usage }, ctx.token)
@@ -176,6 +185,12 @@ function printFatalHelp(fatals: string[]) {
         '  `claude setup-token` and set it before starting the runner (works reliably with many parallel players):\n' +
         '    PowerShell: $env:CLAUDE_CODE_OAUTH_TOKEN="<token>"\n' +
         '    bash:       export CLAUDE_CODE_OAUTH_TOKEN=<token>',
+    );
+  }
+  if (unique.some((f) => f.includes('safety filter'))) {
+    console.log(
+      '\n  The model provider blocked the game prompt as a false positive. Run the line-up again (it is random);\n' +
+        '  if it keeps happening with that model, replace it in the config (e.g. "model": "opus" or another version).',
     );
   }
   if (unique.some((f) => f.startsWith('Codex'))) {

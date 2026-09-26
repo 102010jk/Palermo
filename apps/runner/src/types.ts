@@ -55,6 +55,8 @@ export interface RunResult {
   fatal?: string;
   sessionId?: string;
   usage?: Usage;
+  /** The provider's safety filter refused the conversation: resuming it would fail again, start a new one. */
+  blocked?: string;
 }
 
 export interface Adapter {

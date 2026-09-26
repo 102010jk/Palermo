@@ -76,135 +76,166 @@ function listModels(cmd: string): Promise<string> {
 export const agyAdapter: Adapter = {
   async run(ctx: AgentContext, launch: Launch): Promise<RunResult> {
     const cmd = ctx.spec.command ?? 'agy';
-    writeFileSync(join(ctx.workdir, 'GEMINI.md'), ctx.skill);
-    mkdirSync(join(ctx.workdir, '.agents'), { recursive: true });
-    const pipe = localPipeFor(ctx.mcpUrl);
-    const mcpConfig = {
-      mcpServers: {
-        palermo: {
-          command: process.execPath,
-          args: [BRIDGE, ctx.mcpUrl],
-          env: {
-            PALERMO_TOKEN: ctx.token,
-            PALERMO_BRIDGE_LOG: join(ctx.workdir, 'bridge.log'),
-            PALERMO_MAX_WAIT: String(MAX_WAIT_SEC),
-            ...(pipe ? { PALERMO_SOCKET: pipe } : {}),
-          },
-        },
-      },
-    };
-    writeFileSync(join(ctx.workdir, '.agents', 'mcp_config.json'), JSON.stringify(mcpConfig, null, 2));
-    // Freedom mode approves everything anyway; rules mode allows only the game tools (shell commands stay denied).
-    if (!ctx.freedomMode) ensureAllowRule(ctx);
-
-    const args = ['-p', launch.prompt.replace(/\s*\n\s*/g, ' '), '--output-format', 'stream-json'];
-    if (ctx.spec.model) args.push('--model', ctx.spec.model);
-    if (launch.resumeId) args.push('--conversation', launch.resumeId);
-    if (ctx.freedomMode) args.push('--dangerously-skip-permissions');
-    args.push(...(ctx.spec.extraArgs ?? []));
-
-    const usage: Usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null, durationMs: null };
-    let fatal: string | undefined;
-    let sid: string | undefined;
-    let said = '';
-    let palermoLoaded: boolean | undefined;
-    let palermoCalls = 0;
-    let deniedTool: string | undefined;
-    let modelError = false;
-    let spawnFailed = false;
-    let kill: (() => void) | undefined;
-    let exitTimer: NodeJS.Timeout | undefined;
-    const seenTools = new Set<number>();
-    const flush = () => {
-      if (said.trim()) ctx.log(`💬 ${short(said)}`);
-      said = '';
-    };
-    const checkError = (text: string) => {
-      if (AUTH_ERROR.test(text)) fatal = 'agy is not signed in (run `agy` once and sign in with Google)';
-      else if (MODEL_ERROR.test(text)) modelError = true;
-    };
-
-    const started = Date.now();
-    const code = await runProcess(cmd, args, {
-      cwd: ctx.workdir,
-      env: { AGY_CLI_HIDE_LOGO: '1' },
-      onKill: (k) => (kill = k),
-      onErr: (l) => {
-        ctx.log(`stderr: ${short(l)}`);
-        if (l.startsWith('spawn failed')) spawnFailed = true;
-        checkError(l);
-        if (/mcp\(|palermo/i.test(l) && PERMISSION_DENIED.test(l)) deniedTool ??= short(l, 200);
-      },
-      onLine: (line) => {
-        const m = tryJson(line);
-        if (!m) return ctx.log(short(line));
-        if (m.event === 'init') {
-          sid = m.conversation_id ?? sid;
-          const init = m.init ?? {};
-          const tools: string[] = Array.isArray(init.tools) ? init.tools.map(String) : [];
-          palermoLoaded = tools.some((t) => /palermo/i.test(t) || /wait_for_events/.test(t));
-          ctx.log(`conversation ${sid}, model ${init.model ?? '?'}, permissions ${init.permission_mode ?? '?'}, ${tools.length} tools`);
-          if (!palermoLoaded && tools.length) ctx.log(`⚠️  no palermo tools among: ${short(tools.join(', '), 300)}`);
-          if (init.model) ctx.reportModel(String(init.model));
-          else if (ctx.spec.model) ctx.reportModel(ctx.spec.model);
-        } else if (m.event === 'step_update') {
-          const s = m.step_update ?? {};
-          if (s.step_type === 'agent_response') {
-            said += String(s.text_delta ?? '');
-            if (s.state === 'DONE') flush();
-          } else if (s.step_type === 'tool') {
-            const info = s.tool_info ?? {};
-            const name = String(info.name ?? s.tool_name ?? '');
-            const isGame = PALERMO_TOOLS.test(name) || /palermo/i.test(name);
-            if (!seenTools.has(s.step_index)) {
-              seenTools.add(s.step_index);
-              flush();
-              ctx.log(`🔧 ${name.replace(/^.*[/_]palermo[/_]+|^palermo[/_]+/, '')} ${short(JSON.stringify(info.parameters ?? {}), 200)}`);
-            }
-            if (s.state === 'DONE') {
-              if (info.error) {
-                const text = `${info.error.type ?? ''} ${info.error.message ?? ''}`;
-                ctx.log(`tool failed: ${short(text, 300)}`);
-                if (isGame && PERMISSION_DENIED.test(text)) deniedTool ??= `${name}: ${short(text, 200)}`;
-              } else if (isGame) {
-                palermoCalls++;
-              }
-            }
-          }
-        } else if (m.event === 'result') {
-          flush();
-          const r = m.result ?? {};
-          sid = r.conversation_id ?? sid;
-          // Usage is cumulative for the process; keep the latest.
-          const u = r.usage ?? {};
-          usage.cacheReadTokens = u.cache_read_tokens ?? 0;
-          usage.inputTokens = Math.max(0, (u.input_tokens ?? 0) - usage.cacheReadTokens);
-          usage.outputTokens = (u.output_tokens ?? 0) + (u.thinking_tokens ?? 0);
-          ctx.log(`result: ${r.status ?? '?'} after ${r.num_turns ?? '?'} turns${r.error ? ` – ${short(String(r.error), 300)}` : ''}`);
-          if (r.error) checkError(String(r.error));
-          if (!exitTimer) exitTimer = setTimeout(() => kill?.(), EXIT_GRACE_MS);
-        }
-      },
-    });
-    if (exitTimer) clearTimeout(exitTimer);
-    flush();
-    usage.durationMs = Date.now() - started;
-
-    if (!fatal && modelError) {
-      const models = await listModels(cmd);
-      fatal =
+    const known = ctx.spec.model ? workingModelArgs.get(ctx.spec.model) : undefined;
+    const variants = known ? [known] : modelVariants(ctx.spec.model);
+    let res: AgyResult | undefined;
+    for (const modelArgs of variants) {
+      res = await runOnce(ctx, launch, cmd, modelArgs);
+      if (!res.modelError) {
+        if (ctx.spec.model) workingModelArgs.set(ctx.spec.model, modelArgs);
+        return res;
+      }
+      if (variants.length > 1) ctx.log(`agy did not accept ${modelArgs.join(' ')}; trying the next form`);
+    }
+    const models = await listModels(cmd);
+    return {
+      ...res!,
+      fatal:
         `agy rejected the model "${ctx.spec.model}". Use a name from \`agy models\`` +
-        (models ? `:\n${models.split(/\r?\n/).map((l) => `      ${l}`).join('\n')}` : '');
-    }
-    if (!fatal && deniedTool && palermoCalls === 0) {
-      fatal =
-        `agy blocked the palermo game tools (${deniedTool}). Update agy (\`agy update\`), check that ${USER_SETTINGS} ` +
-        'has "mcp(palermo/*)" in permissions.allow, or as a last resort add "extraArgs": ["--dangerously-skip-permissions"] to this player';
-    }
-    if (!fatal && palermoLoaded === false && palermoCalls === 0) {
-      fatal = `agy did not load the palermo MCP server from ${join(ctx.workdir, '.agents', 'mcp_config.json')} (see bridge.log next to it)`;
-    }
-    if (!fatal && spawnFailed) fatal = `agy could not be started ("${cmd}") – is the Antigravity CLI installed and on PATH?`;
-    return { exitCode: code, sessionId: sid, usage, fatal };
+        (models ? `:\n${models.split(/\r?\n/).map((l) => `      ${l}`).join('\n')}` : ''),
+    };
   },
 };
+
+/** Model selections that worked, per configured model name. */
+const workingModelArgs = new Map<string, string[]>();
+
+/**
+ * agy lists models as "gemini-3.8-flash-high", but some versions want the base name plus --effort
+ * ("--model gemini-3.8-flash requires --effort"). Try the forms in turn.
+ */
+function modelVariants(model: string | undefined): string[][] {
+  if (!model) return [[]];
+  const m = /^(.*)-(low|medium|high)$/.exec(model);
+  if (m) return [['--model', model], ['--model', m[1], '--effort', m[2]], ['--model', model, '--effort', m[2]]];
+  return [['--model', model], ['--model', model, '--effort', 'high'], ['--model', `${model}-high`]];
+}
+
+type AgyResult = RunResult & { modelError?: boolean };
+
+async function runOnce(ctx: AgentContext, launch: Launch, cmd: string, modelArgs: string[]): Promise<AgyResult> {
+  writeFileSync(join(ctx.workdir, 'GEMINI.md'), ctx.skill);
+  mkdirSync(join(ctx.workdir, '.agents'), { recursive: true });
+  const pipe = localPipeFor(ctx.mcpUrl);
+  const mcpConfig = {
+    mcpServers: {
+      palermo: {
+        command: process.execPath,
+        args: [BRIDGE, ctx.mcpUrl],
+        env: {
+          PALERMO_TOKEN: ctx.token,
+          PALERMO_BRIDGE_LOG: join(ctx.workdir, 'bridge.log'),
+          PALERMO_MAX_WAIT: String(MAX_WAIT_SEC),
+          ...(pipe ? { PALERMO_SOCKET: pipe } : {}),
+        },
+      },
+    },
+  };
+  writeFileSync(join(ctx.workdir, '.agents', 'mcp_config.json'), JSON.stringify(mcpConfig, null, 2));
+  // Freedom mode approves everything anyway; rules mode allows only the game tools (shell commands stay denied).
+  if (!ctx.freedomMode) ensureAllowRule(ctx);
+
+  const args = ['-p', launch.prompt.replace(/\s*\n\s*/g, ' '), '--output-format', 'stream-json'];
+  args.push(...modelArgs);
+  if (launch.resumeId) args.push('--conversation', launch.resumeId);
+  if (ctx.freedomMode) args.push('--dangerously-skip-permissions');
+  args.push(...(ctx.spec.extraArgs ?? []));
+
+  const usage: Usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null, durationMs: null };
+  let fatal: string | undefined;
+  let sid: string | undefined;
+  let said = '';
+  let palermoLoaded: boolean | undefined;
+  let palermoCalls = 0;
+  let deniedTool: string | undefined;
+  let modelError = false;
+  let spawnFailed = false;
+  let kill: (() => void) | undefined;
+  let exitTimer: NodeJS.Timeout | undefined;
+  const seenTools = new Set<number>();
+  const flush = () => {
+    if (said.trim()) ctx.log(`💬 ${short(said)}`);
+    said = '';
+  };
+  const checkError = (text: string) => {
+    if (AUTH_ERROR.test(text)) fatal = 'agy is not signed in (run `agy` once and sign in with Google)';
+    else if (MODEL_ERROR.test(text)) modelError = true;
+  };
+
+  const started = Date.now();
+  const code = await runProcess(cmd, args, {
+    cwd: ctx.workdir,
+    env: { AGY_CLI_HIDE_LOGO: '1' },
+    onKill: (k) => (kill = k),
+    onErr: (l) => {
+      ctx.log(`stderr: ${short(l)}`);
+      if (l.startsWith('spawn failed')) spawnFailed = true;
+      checkError(l);
+      if (/mcp\(|palermo/i.test(l) && PERMISSION_DENIED.test(l)) deniedTool ??= short(l, 200);
+    },
+    onLine: (line) => {
+      const m = tryJson(line);
+      if (!m) return ctx.log(short(line));
+      if (m.event === 'init') {
+        sid = m.conversation_id ?? sid;
+        const init = m.init ?? {};
+        const tools: string[] = Array.isArray(init.tools) ? init.tools.map(String) : [];
+        palermoLoaded = tools.some((t) => /palermo/i.test(t) || /wait_for_events/.test(t));
+        ctx.log(`conversation ${sid}, model ${init.model ?? '?'}, permissions ${init.permission_mode ?? '?'}, ${tools.length} tools`);
+        if (!palermoLoaded && tools.length) ctx.log(`⚠️  no palermo tools among: ${short(tools.join(', '), 300)}`);
+        if (init.model) ctx.reportModel(String(init.model));
+        else if (ctx.spec.model) ctx.reportModel(ctx.spec.model);
+      } else if (m.event === 'step_update') {
+        const s = m.step_update ?? {};
+        if (s.step_type === 'agent_response') {
+          said += String(s.text_delta ?? '');
+          if (s.state === 'DONE') flush();
+        } else if (s.step_type === 'tool') {
+          const info = s.tool_info ?? {};
+          const name = String(info.name ?? s.tool_name ?? '');
+          const isGame = PALERMO_TOOLS.test(name) || /palermo/i.test(name);
+          if (!seenTools.has(s.step_index)) {
+            seenTools.add(s.step_index);
+            flush();
+            ctx.log(`🔧 ${name.replace(/^.*[/_]palermo[/_]+|^palermo[/_]+/, '')} ${short(JSON.stringify(info.parameters ?? {}), 200)}`);
+          }
+          if (s.state === 'DONE') {
+            if (info.error) {
+              const text = `${info.error.type ?? ''} ${info.error.message ?? ''}`;
+              ctx.log(`tool failed: ${short(text, 300)}`);
+              if (isGame && PERMISSION_DENIED.test(text)) deniedTool ??= `${name}: ${short(text, 200)}`;
+            } else if (isGame) {
+              palermoCalls++;
+            }
+          }
+        }
+      } else if (m.event === 'result') {
+        flush();
+        const r = m.result ?? {};
+        sid = r.conversation_id ?? sid;
+        // Usage is cumulative for the process; keep the latest.
+        const u = r.usage ?? {};
+        usage.cacheReadTokens = u.cache_read_tokens ?? 0;
+        usage.inputTokens = Math.max(0, (u.input_tokens ?? 0) - usage.cacheReadTokens);
+        usage.outputTokens = (u.output_tokens ?? 0) + (u.thinking_tokens ?? 0);
+        ctx.log(`result: ${r.status ?? '?'} after ${r.num_turns ?? '?'} turns${r.error ? ` – ${short(String(r.error), 300)}` : ''}`);
+        if (r.error) checkError(String(r.error));
+        if (!exitTimer) exitTimer = setTimeout(() => kill?.(), EXIT_GRACE_MS);
+      }
+    },
+  });
+  if (exitTimer) clearTimeout(exitTimer);
+  flush();
+  usage.durationMs = Date.now() - started;
+
+  if (!fatal && deniedTool && palermoCalls === 0) {
+    fatal =
+      `agy blocked the palermo game tools (${deniedTool}). Update agy (\`agy update\`), check that ${USER_SETTINGS} ` +
+      'has "mcp(palermo/*)" in permissions.allow, or as a last resort add "extraArgs": ["--dangerously-skip-permissions"] to this player';
+  }
+  if (!fatal && palermoLoaded === false && palermoCalls === 0) {
+    fatal = `agy did not load the palermo MCP server from ${join(ctx.workdir, '.agents', 'mcp_config.json')} (see bridge.log next to it)`;
+  }
+  if (!fatal && spawnFailed) fatal = `agy could not be started ("${cmd}") – is the Antigravity CLI installed and on PATH?`;
+  return { exitCode: code, sessionId: sid, usage, fatal, modelError: !fatal && modelError && palermoCalls === 0 };
+}

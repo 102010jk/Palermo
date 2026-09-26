@@ -47,6 +47,9 @@ function mcpErrors(path: string): string[] {
 
 const BRIDGE = join(dirname(fileURLToPath(import.meta.url)), '..', 'mcp-bridge.mjs');
 
+/** "API Error: <model>'s safeguards flagged this message (…/aup)". */
+const SAFEGUARD = /safeguards flagged|usage polic|legal\/aup/i;
+
 const AUTH_ERROR = /authenticat|oauth|invalid api key|\/login|not logged in|credit balance/i;
 
 export const claudeAdapter: Adapter = {
@@ -99,6 +102,7 @@ export const claudeAdapter: Adapter = {
     let usage: Usage | undefined;
     let sid = sessionId;
     let fatal: string | undefined;
+    let blocked: string | undefined;
     const code = await runProcess(ctx.spec.command ?? 'claude', args, {
       cwd: ctx.workdir,
       env: { MCP_TOOL_TIMEOUT: '300000', MCP_TIMEOUT: '60000', ...PARENT_SESSION_ENV },
@@ -120,6 +124,7 @@ export const claudeAdapter: Adapter = {
             if (c.type === 'text' && c.text?.trim()) {
               ctx.log(`💬 ${short(c.text)}`);
               if (AUTH_ERROR.test(c.text)) fatal = `Claude Code is not logged in: ${short(c.text, 120)}`;
+              if (SAFEGUARD.test(c.text)) blocked = short(c.text, 200);
             }
             if (c.type === 'tool_use') ctx.log(`🔧 ${String(c.name).replace('mcp__palermo__', '')} ${short(JSON.stringify(c.input ?? {}), 200)}`);
           }
@@ -144,6 +149,6 @@ export const claudeAdapter: Adapter = {
         for (const line of readFileSync(bridgeLog, 'utf8').trim().split(/\r?\n/).slice(-6)) ctx.log(`bridge: ${line}`);
       }
     }
-    return { exitCode: code, sessionId: sid, usage, fatal };
+    return { exitCode: code, sessionId: sid, usage, fatal, blocked };
   },
 };
