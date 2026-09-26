@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ROLES, type GameEvent, type NightVisit, type PlayerView, type PublicPlayer } from '@palermo/engine';
-import { api, getSocket } from '../api.ts';
+import { api, download, getSocket } from '../api.ts';
 import { useApp } from '../App.tsx';
 import { Character, Grave, House, LOOKS, lookFor } from '../components/Sprites.tsx';
 import { TownRing, type Bubble, type NightStep } from '../components/TownRing.tsx';
@@ -565,6 +565,9 @@ export function GamePage({ gameId }: { gameId: string }) {
                     Stop game
                   </button>
                 )}
+                <button onClick={() => download(`/api/admin/games/${gameId}/export`, `palermo-${gameId}.json`).catch((e) => setError(e.message))}>
+                  Download JSON
+                </button>
                 {view.phase === 'ended' && (
                   <button
                     className="danger"

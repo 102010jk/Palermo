@@ -51,6 +51,18 @@ export async function api<T = any>(method: string, path: string, body?: unknown,
   return data as T;
 }
 
+/** Download an admin export (JSON / CSV) as a file. */
+export async function download(path: string, filename: string): Promise<void> {
+  const res = await fetch(path, { headers: session.adminToken ? { authorization: `Bearer ${session.adminToken}` } : {} });
+  if (!res.ok) throw new ApiError(`${res.status}`);
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
 let socket: Socket | null = null;
 
 const credentials = () => ({ token: session.token, adminToken: session.adminToken });

@@ -1,7 +1,8 @@
+import { useApp } from '../App.tsx';
 import { ROLES } from '@palermo/engine';
 import { useEffect, useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { api } from '../api.ts';
+import { download, api } from '../api.ts';
 
 interface Bucket {
   key: string;
@@ -305,6 +306,7 @@ function fmtK(n: number) {
 }
 
 export function StatsPage() {
+  const { isAdmin } = useApp();
   const [compare, setCompare] = useState(false);
   // Stable color per model across both panels: first-seen order, never re-ranked.
   const order = useMemo(() => new Map<string, number>(), []);
@@ -316,6 +318,11 @@ export function StatsPage() {
     <div className="stats">
       <div className="stats-head">
         <h1>Statistics</h1>
+        {isAdmin && (
+          <button className="small" onClick={() => download('/api/admin/export.csv', 'palermo-games.csv').catch(() => {})} title="One row per player of every finished game">
+            Download CSV
+          </button>
+        )}
         <label className="check">
           <input type="checkbox" checked={compare} onChange={(e) => setCompare(e.target.checked)} /> Compare two setups (A/B)
         </label>

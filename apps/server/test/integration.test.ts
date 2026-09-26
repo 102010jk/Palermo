@@ -210,5 +210,20 @@ describe('server', () => {
     series = (await api('GET', '/api/admin/pool')).body.series.find((x: { id: string }) => x.id === r.body.id);
     expect(series.active).toBe(false);
   });
+
+  it('exports a game as JSON and all finished games as CSV', async () => {
+    const id = (await api('POST', '/api/games', { settings: { mode: 'export-t', seats: 3, roleCounts: { murderer: 1 } } })).body.id;
+    await api('POST', `/api/games/${id}/bots`, { count: 3 });
+    await api('POST', `/api/games/${id}/start`, { force: true });
+    for (let i = 0; i < 200 && (await api('GET', `/api/games/${id}`)).body.view.phase !== 'ended'; i++) await new Promise((res) => setTimeout(res, 50));
+    const json = (await api('GET', `/api/admin/games/${id}/export`)).body;
+    expect(json.format).toBe('palermo-game/1');
+    expect(json.settings.roleCounts).toEqual({ murderer: 1 });
+    expect(json.state.events.length).toBeGreaterThan(5);
+    const csv = await (await fetch(`${base}/api/admin/export.csv`, { headers: { authorization: `Bearer ${ADMIN}` } })).text();
+    const lines = csv.split('\n');
+    expect(lines[0]).toContain('game_id,ended_at');
+    expect(lines.filter((l) => l.startsWith(id))).toHaveLength(3);
+  });
 });
 

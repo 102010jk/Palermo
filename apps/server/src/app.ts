@@ -359,6 +359,66 @@ export function createPalermo(cfg: AppConfig): PalermoApp {
       return { ok: true };
     }),
   );
+  // Full record of one game (settings = the rules it was played with, every event, reports, token usage).
+  app.get(
+    '/api/admin/games/:id/export',
+    wrap((req, res) => {
+      requireAdmin(req);
+      const game = manager.get(String(req.params.id));
+      if (!game) throw new HttpError(404, 'Unknown game.');
+      const id = game.state.id;
+      res.setHeader('content-disposition', `attachment; filename="palermo-${id}.json"`);
+      return {
+        format: 'palermo-game/1',
+        exportedAt: new Date().toISOString(),
+        settings: game.settings,
+        state: game.state,
+        players: db.sql.prepare('SELECT * FROM game_players WHERE game_id = ?').all(id),
+        reports: db.reports(id),
+        usage: db.sql.prepare('SELECT * FROM usage WHERE game_id = ? ORDER BY id').all(id),
+        audit: db.auditLog(id),
+      };
+    }),
+  );
+  // One row per player of every finished game, for spreadsheets and analysis.
+  app.get(
+    '/api/admin/export.csv',
+    wrap((req, res) => {
+      requireAdmin(req);
+      const rows = db.sql
+        .prepare(
+          `SELECT g.id AS game_id, g.ended_at, g.settings, g.state, g.winner, p.name, p.kind, p.provider, p.model, p.role, p.team,
+                  p.won, p.survived, p.death_round, p.death_cause
+             FROM games g JOIN game_players p ON p.game_id = g.id WHERE g.phase = 'ended' ORDER BY g.ended_at, p.player_id`,
+        )
+        .all() as Record<string, unknown>[];
+      const cols = ['game_id', 'ended_at', 'aborted', 'mode', 'gameStyle', 'series', 'killMode', 'winner', 'rounds', 'name', 'kind', 'provider', 'model', 'role', 'team', 'won', 'survived', 'death_round', 'death_cause'];
+      const esc = (v: unknown) => {
+        const t = v === null || v === undefined ? '' : String(v);
+        return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+      };
+      const lines = [cols.join(',')];
+      for (const r of rows) {
+        const st = JSON.parse(String(r.settings));
+        const state = JSON.parse(String(r.state)) as GameState;
+        const row: Record<string, unknown> = {
+          ...r,
+          ended_at: r.ended_at ? new Date(Number(r.ended_at)).toISOString() : '',
+          aborted: state.aborted ? 1 : 0,
+          mode: st.mode,
+          gameStyle: st.gameStyle ?? 'simulation',
+          series: st.series ?? '',
+          killMode: st.killMode ?? 'shared',
+          rounds: state.round,
+        };
+        lines.push(cols.map((c) => esc(row[c])).join(','));
+      }
+      res.setHeader('content-type', 'text/csv; charset=utf-8');
+      res.setHeader('content-disposition', 'attachment; filename="palermo-games.csv"');
+      res.send(lines.join('\n'));
+      return undefined;
+    }),
+  );
   app.post('/api/games/:id/kick', adminAction((id, b) => void manager.apply(id, (g) => g.removePlayer(String(b.playerId)))));
 
   app.get('/api/games/:id/reports', wrap((req) => db.reports(String(req.params.id))));

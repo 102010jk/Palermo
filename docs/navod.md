@@ -146,6 +146,10 @@ Na **Games → ＋ New game**:
 
 Ve statistikách jsou nové filtry: sestava rolí, styl hry, série, způsob zabíjení.
 
+**Export:** u každé hry v panelu Game master **Download JSON** (celá hra: pravidla/nastavení, všechny události,
+myšlenky, reporty, tokeny). Na stránce Stats **Download CSV** (jeden řádek za hráče každé dohrané hry:
+model, role, tým, výhra, přežil, styl hry, série…) pro Excel / analýzu.
+
 ### Došel limit předplatného? Hra se uloží a dohraje
 
 - Když některý hráč narazí na limit (Claude „usage limit reached / resets 3pm“, Codex „You've hit your usage
