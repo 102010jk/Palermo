@@ -198,3 +198,131 @@ export function shade(hex: string, f: number): string {
   const b = Math.round((n & 255) * f);
   return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
 }
+
+/** Detailed cottages for the ring town (three variants). R roof, r roof shade, C chimney, W wall, w wall shade,
+ * L window (lit at night), F window frame, D door, K knob, P flower box, G flowers, S step. */
+const COTTAGES = [
+  [
+    '..............CC......',
+    '..............CC......',
+    '.........RRRR.CC......',
+    '........RRRRRRRR......',
+    '.......RRrRRRRrRR.....',
+    '......RRRRRRRRRRRR....',
+    '.....RRrRRRRRRRRrRR...',
+    '....RRRRRRRRRRRRRRRR..',
+    '...RRRRRRRRRRRRRRRRRR.',
+    '....WWWWWWWWWWWWWWWW..',
+    '....WFFFFWWWWWWFFFFW..',
+    '....WFLLFWWWWWWFLLFW..',
+    '....WFLLFWWDDWWFLLFW..',
+    '....WFFFFWDDDDWFFFFW..',
+    '....WPGPGWDDKDWPGPGW..',
+    '....WwwwwwDDDDwwwwwW..',
+    '....wwwwwwDDDDwwwwww..',
+    '..........SSSS........',
+  ],
+  [
+    '.....CC...............',
+    '.....CC...............',
+    '.....CCRRRRRRRRRR.....',
+    '.....RRRRRRRRRRRRRR...',
+    '....RRRrRRRRRRRrRRRR..',
+    '...RRRRRRRRRRRRRRRRRR.',
+    '..RRRRRRRRRRRRRRRRRRRR',
+    '...WWWWWWWWWWWWWWWWWW.',
+    '...WFFFFWWFFFFWWFFFFW.',
+    '...WFLLFWWFLLFWWFLLFW.',
+    '...WFFFFWWFFFFWWFFFFW.',
+    '...WWWWWWWWWWWWWWWWWW.',
+    '...WFFFFWWDDDDWWPGPGW.',
+    '...WFLLFWWDDDDWWWWWWW.',
+    '...WFFFFWWDDKDWWWWWWW.',
+    '...wwwwwwwDDDDwwwwwww.',
+    '...wwwwwwwDDDDwwwwwww.',
+    '..........SSSS........',
+  ],
+  [
+    '..........RR..........',
+    '.........RRRR.........',
+    '........RRrRRR........',
+    '.......RRRRRRRR...CC..',
+    '......RRRRRRRRRR..CC..',
+    '.....RRRrRRRRrRRR.CC..',
+    '....RRRRRRRRRRRRRRCC..',
+    '...RRRRRRRRRRRRRRRRR..',
+    '..RRRRRRRRRRRRRRRRRRR.',
+    '...WWWWWWWWWWWWWWWWW..',
+    '...WWWWWWFFFFWWWWWWW..',
+    '...WFFFFWFLLFWFFFFWW..',
+    '...WFLLFWFFFFWFLLFWW..',
+    '...WFFFFWWDDWWFFFFWW..',
+    '...WPGPGWDDDDWPGPGWW..',
+    '...WwwwwwDDKDwwwwwwW..',
+    '...wwwwwwDDDDwwwwwww..',
+    '.........SSSS.........',
+  ],
+];
+
+export function Cottage({
+  variant = 0,
+  night,
+  dead,
+  scale = 3,
+  roof = '#b4533c',
+}: {
+  variant?: number;
+  night: boolean;
+  dead?: boolean;
+  scale?: number;
+  roof?: string;
+}) {
+  const dim = night ? 0.45 : 1;
+  const wall = dead ? '#8b8680' : '#efe3c8';
+  const lit = dead ? '#2b2b33' : night ? '#ffd76a' : '#9cc9e8';
+  return (
+    <Pixels
+      rows={COTTAGES[variant % COTTAGES.length]}
+      scale={scale}
+      colors={{
+        R: shade(dead ? '#6b6b6b' : roof, dim),
+        r: shade(dead ? '#555' : roof, dim * 0.75),
+        C: shade('#7a5a4a', dim),
+        W: shade(wall, night ? 0.5 : 1),
+        w: shade(wall, night ? 0.38 : 0.82),
+        L: lit,
+        F: shade('#5a3d2b', dim),
+        D: shade('#7a5230', dim),
+        K: '#e8c15a',
+        P: shade('#6a4a2a', dim),
+        G: dead ? shade('#6b6b6b', dim) : shade('#e0507a', dim),
+        S: shade('#9a9488', dim),
+      }}
+    />
+  );
+}
+
+const FOUNTAIN = [
+  '.......BB.......',
+  '......BWWB......',
+  '.......WW.......',
+  '...W...WW...W...',
+  '....W..WW..W....',
+  '.OOOOOOOOOOOOOO.',
+  'OSSSSSSSSSSSSSSO',
+  'OSWWWWWWWWWWWWSO',
+  'OSWBWWWWWWWBWWSO',
+  'OSSSSSSSSSSSSSSO',
+  '.OOOOOOOOOOOOOO.',
+];
+
+export function Fountain({ scale = 4, night }: { scale?: number; night: boolean }) {
+  const d = night ? 0.5 : 1;
+  return <Pixels rows={FOUNTAIN} scale={scale} colors={{ O: shade('#6b6258', d), S: shade('#a79e92', d), W: shade('#7fc4ef', d), B: shade('#cfeeff', d) }} />;
+}
+
+const LAMP = ['.YY.', 'YLLY', '.YY.', '.OO.', '.O..', '.O..', '.O..', '.O..', '.O..', 'OOO.'];
+
+export function Lamp({ scale = 3, night }: { scale?: number; night: boolean }) {
+  return <Pixels rows={LAMP} scale={scale} colors={{ Y: night ? '#ffe28a' : '#8a8a8a', L: night ? '#fff6c8' : '#bdbdbd', O: '#2b2b33' }} />;
+}

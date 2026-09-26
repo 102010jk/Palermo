@@ -1195,3 +1195,262 @@ button:focus-visible {
     max-width: none;
   }
 }
+
+/* ------------------------------------------------------------------ ring town (visual mode) */
+.ring-town {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  min-height: 460px;
+  max-height: 78vh;
+  margin-top: 36px;
+}
+.ring-town.is-day {
+  background: radial-gradient(ellipse 70% 62% at 50% 52%, #7fb35f 0 60%, #6aa84f 61%, #5a9443 100%);
+}
+.ring-town.is-night {
+  background: radial-gradient(ellipse 70% 62% at 50% 52%, #20382a 0 60%, #1a2e22 61%, #132319 100%);
+}
+.ring-town .plaza {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 46%;
+  height: 44%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, rgba(0, 0, 0, 0.08) 1px, transparent 1.5px) 0 0 / 14px 14px,
+    radial-gradient(ellipse, #d8c9a3 0 55%, #c7b68c 70%, #b3a27a 100%);
+  box-shadow: inset 0 0 0 4px #9c8b64;
+  transition: filter 1.2s;
+}
+.ring-town.is-night .plaza {
+  filter: brightness(0.42) saturate(0.7);
+}
+.ring-town .plaza-center,
+.ring-town .lamp {
+  position: absolute;
+  transform: translate(-50%, -60%);
+  pointer-events: none;
+}
+.ring-town.is-night .lamp::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 6px;
+  width: 70px;
+  height: 70px;
+  transform: translate(-50%, -30%);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 226, 138, 0.35), transparent 70%);
+}
+.ring-house {
+  position: absolute;
+  transform: translate(-50%, -70%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  transition: filter 1s;
+}
+.ring-house.dead {
+  filter: grayscale(0.9) brightness(0.8);
+}
+.ring-house.visited svg {
+  animation: house-knock 0.35s steps(2) 3;
+}
+@keyframes house-knock {
+  50% {
+    transform: translateX(2px);
+  }
+}
+.ring-house .nametag,
+.ring-house .modeltag,
+.ring-house .roletag,
+.ring-house .readytag {
+  position: static;
+  transform: none;
+}
+.ring-house .trap-mark {
+  position: absolute;
+  bottom: 38px;
+  font-size: 1.1rem;
+  filter: drop-shadow(0 0 4px #ffcf5a);
+}
+.ring-person {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform: translate(-50%, -85%);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: default;
+  transition:
+    left 1.8s ease-in-out,
+    top 1.8s ease-in-out,
+    opacity 0.8s;
+}
+.ring-person.targetable {
+  cursor: pointer;
+}
+.ring-person.targetable .figure {
+  filter: drop-shadow(0 0 3px #fff);
+}
+.ring-person.selected .figure {
+  filter: drop-shadow(0 0 5px var(--gold));
+}
+.ring-person.me .figure {
+  outline: 2px dashed rgba(255, 255, 255, 0.5);
+  outline-offset: 2px;
+}
+.ring-person.inside .figure {
+  opacity: 0;
+}
+.ring-person.dead {
+  transition: none;
+}
+.ring-person .zzz {
+  position: absolute;
+  top: -10px;
+  right: -6px;
+  font-family: var(--pixel);
+  font-size: 0.6rem;
+  color: #cfd6ff;
+  animation: zzz 2.4s ease-in-out infinite;
+}
+@keyframes zzz {
+  0% {
+    opacity: 0;
+    transform: translate(0, 4px);
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(6px, -8px);
+  }
+}
+.ring-person.walking .figure {
+  animation: walk 0.3s steps(2) infinite;
+}
+@keyframes walk {
+  50% {
+    transform: translateY(-3px);
+  }
+}
+.ring-person .bubble {
+  bottom: calc(100% + 4px);
+  max-width: 210px;
+}
+.ring-person .vote-badge {
+  top: -6px;
+  right: -14px;
+}
+.ring-person .action-icon {
+  position: absolute;
+  top: -22px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 1.3rem;
+  animation: pop 0.4s ease-out;
+  filter: drop-shadow(0 0 6px rgba(0, 0, 0, 0.6));
+}
+.ring-person .action-icon.kill {
+  filter: drop-shadow(0 0 8px #ff3b30);
+}
+.ring-person .action-icon.protect {
+  color: #4cc38a;
+  filter: drop-shadow(0 0 8px #4cc38a);
+}
+.ring-person .action-icon.caught {
+  animation: snap 0.5s steps(3);
+}
+@keyframes pop {
+  from {
+    transform: translateX(-50%) scale(0.2);
+  }
+  to {
+    transform: translateX(-50%) scale(1);
+  }
+}
+@keyframes snap {
+  33% {
+    transform: translateX(-50%) rotate(-20deg) scale(1.3);
+  }
+  66% {
+    transform: translateX(-50%) rotate(20deg) scale(1.3);
+  }
+}
+.ring-person.shot .figure {
+  animation: shot-flash 0.25s steps(2) 6;
+}
+@keyframes shot-flash {
+  50% {
+    filter: brightness(3) drop-shadow(0 0 10px #fff);
+  }
+}
+.vote-arrows {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 90;
+}
+.layout-toggle {
+  margin-left: auto;
+}
+@media (max-width: 700px) {
+  .ring-town {
+    min-height: 360px;
+    aspect-ratio: 1 / 1.05;
+  }
+  .ring-house .modeltag,
+  .ring-house .roletag {
+    display: none;
+  }
+}
+.ring-person .person-name {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.68rem;
+  color: #fff;
+  background: rgba(20, 16, 32, 0.72);
+  border-radius: 4px;
+  padding: 0 5px;
+  white-space: nowrap;
+}
+.night-caption {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  z-index: 300;
+  background: rgba(10, 8, 24, 0.85);
+  border: 2px solid #4a4270;
+  border-radius: 8px;
+  padding: 6px 14px;
+  color: #f1ecff;
+  font-size: 0.95rem;
+  white-space: nowrap;
+  animation: pop-caption 0.3s ease-out;
+}
+.night-caption.kill {
+  border-color: var(--mafia);
+}
+.night-caption.protect {
+  border-color: #4cc38a;
+}
+.night-caption.trap {
+  border-color: #e0b45a;
+}
+@keyframes pop-caption {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 6px);
+  }
+}

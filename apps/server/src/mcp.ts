@@ -231,7 +231,10 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
     },
     guard(async (args: { message: string; thought?: string }) => {
       const { game, playerId } = seat();
-      manager.apply(game.state.id, (g) => g.say(playerId, args.message, args.thought));
+      const events = manager.apply(game.state.id, (g) => g.say(playerId, args.message, args.thought));
+      if (events.some((e) => e.data.kind === 'speech_queued')) {
+        return text('Others are speaking: your message is in line and will be heard shortly. Call wait_for_events.');
+      }
       return text('Sent. Call wait_for_events to hear replies.');
     }),
   );

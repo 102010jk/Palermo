@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ROLES, type GameEvent, type PlayerView, type PublicPlayer } from '@palermo/engine';
+import { ROLES, type GameEvent, type NightVisit, type PlayerView, type PublicPlayer } from '@palermo/engine';
 import { api, getSocket } from '../api.ts';
 import { useApp } from '../App.tsx';
 import { Character, Grave, House, LOOKS, lookFor } from '../components/Sprites.tsx';
+import { TownRing, type Bubble, type NightStep } from '../components/TownRing.tsx';
 
 interface Report {
   player_id: string;
@@ -23,8 +24,9 @@ function useNow(active: boolean) {
   return now;
 }
 
-type BubbleKind = 'chat' | 'team' | 'thought';
-type Bubble = { text: string; kind: BubbleKind; at: number };
+/** God-view night animation: order of the walks and their timing (matches the server's VISUAL_VISIT_MS). */
+const WALK_ORDER: Record<string, number> = { trap: 0, protect: 1, track: 2, kill: 3 };
+const STEP_MS = { go: 1900, act: 1200, back: 1900 };
 
 function bubbleFrom(e: GameEvent): Bubble | null {
   if (!e.actor) return null;
@@ -46,8 +48,12 @@ function deriveState(events: GameEvent[]) {
       phase = String(e.data.phase);
       round = Number(e.data.round ?? round);
       votes = {};
-    } else if (e.type === 'night_resolved' && e.data.victim) dead.add(String(e.data.victim));
-    else if (e.type === 'day_resolved') {
+    } else if (e.type === 'night_resolved') {
+      for (const v of (e.data.victims as string[] | undefined) ?? (e.data.victim ? [String(e.data.victim)] : [])) dead.add(v);
+    } else if (e.type === 'shot' && e.data.target) {
+      dead.add(String(e.data.target));
+      for (const [voter, t] of Object.entries(votes)) if (t === e.data.target || voter === e.data.target) delete votes[voter];
+    } else if (e.type === 'day_resolved') {
       if (e.data.eliminated) dead.add(String(e.data.eliminated));
       votes = {};
     } else if (e.type === 'vote' && e.actor) {
@@ -66,6 +72,9 @@ function deriveState(events: GameEvent[]) {
 /** How long a replay lingers on an event, at 1x speed. */
 function replayDelay(e: GameEvent | undefined, admin: boolean): number {
   if (!e) return 0;
+  if (e.type === 'notice' && e.data.kind === 'night_plan') {
+    return admin ? 1000 + ((e.data.visits as NightVisit[]) ?? []).filter((v) => !v.home).length * 5000 : 0;
+  }
   if (e.type === 'notice' && e.vis.scope === 'admin') return 0;
   if (['player_joined', 'player_ready', 'player_left'].includes(e.type)) return 120;
   if (e.type === 'role_assigned') return admin ? 400 : 1500;
@@ -97,6 +106,12 @@ export function GamePage({ gameId }: { gameId: string }) {
   const stick = useRef(true);
 
   const admin = isAdmin && godView;
+  const [layout, setLayout] = useState<'ring' | 'row' | null>(null);
+  const [step, setStep] = useState<NightStep | null>(null);
+  const [traps, setTraps] = useState<Set<string>>(new Set());
+  const planSeq = useRef(0);
+  const stepTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => () => stepTimers.current.forEach(clearTimeout), []);
 
   useEffect(() => {
     const s = getSocket();
@@ -197,6 +212,46 @@ export function GamePage({ gameId }: { gameId: string }) {
     return c;
   }, [view?.votes, view?.players, replayState]);
 
+  const ring = (layout ?? (view?.settings.gameStyle === 'visual' ? 'ring' : 'row')) === 'ring';
+
+  // God view: play the night's visits one after another (live, and in replays).
+  useEffect(() => {
+    if (!ring || !admin) return;
+    const source = replay ? shownEvents : events;
+    let plan: GameEvent | undefined;
+    for (let i = source.length - 1; i >= 0; i--) {
+      if (source[i].data?.kind === 'night_plan') {
+        plan = source[i];
+        break;
+      }
+    }
+    if (!plan || plan.seq <= planSeq.current) return;
+    planSeq.current = plan.seq;
+    if (replay ? source[source.length - 1]?.seq !== plan.seq : view?.phase !== 'night') return;
+    stepTimers.current.forEach(clearTimeout);
+    stepTimers.current = [];
+    const visits = (plan.data.visits as NightVisit[]) ?? [];
+    setTraps(new Set(visits.filter((v) => v.kind === 'trap' && !v.crazy).map((v) => v.to)));
+    const walks = visits.filter((v) => !v.home).sort((a, b) => (WALK_ORDER[a.kind] ?? 9) - (WALK_ORDER[b.kind] ?? 9));
+    const speed = replay?.speed ?? 1;
+    let t = 600 / speed;
+    for (const v of walks) {
+      for (const stage of ['go', 'act', 'back'] as const) {
+        const s = { actor: v.from, to: v.to, kind: v.kind, stage, caught: v.caught };
+        stepTimers.current.push(setTimeout(() => setStep(s), t));
+        t += STEP_MS[stage] / speed;
+      }
+    }
+    stepTimers.current.push(setTimeout(() => setStep(null), t));
+  }, [ring, admin, events, shownEvents.length, replay?.speed, view?.phase]);
+
+  useEffect(() => {
+    if (phase !== 'night') setTraps(new Set());
+  }, [phase]);
+
+  const lastShot = [...shownEvents].reverse().find((e) => e.type === 'shot');
+  const shotId = lastShot && (replay || Date.now() - lastShot.at < 4000) ? String(lastShot.data.target) : null;
+
   if (missing && !view) return <div className="card">Game not found.</div>;
   if (!view) return <div className="loading">Loading town…</div>;
 
@@ -228,6 +283,14 @@ export function GamePage({ gameId }: { gameId: string }) {
   const replayClock = replay && shownEvents.length ? fmtTime((shownEvents[shownEvents.length - 1].at ?? startedAt) - startedAt) : null;
   const canChat = !replay && (view.phase === 'lobby' || (me?.alive && (view.phase === 'day' || (view.phase === 'night' && me.role === 'murderer' && (me.teammates?.length ?? 0) > 0))));
   const joined = !!me;
+  const idByName = new Map(view.players.map((p) => [p.name, p.id]));
+  const ringVotes: Record<string, string> = replayState
+    ? replayState.votes
+    : Object.fromEntries(
+        Object.entries(view.votes)
+          .map(([v, t]) => [idByName.get(v) ?? '', t === 'skip' ? 'skip' : idByName.get(t) ?? ''])
+          .filter(([v, t]) => v && t),
+      );
 
   return (
     <div className={`game ${phase}`}>
@@ -251,12 +314,33 @@ export function GamePage({ gameId }: { gameId: string }) {
               {winner === 'mafia' ? 'Murderers win' : winner === 'town' ? 'Town wins' : 'Draw'}
             </span>
           )}
+          <button className="small ghost layout-toggle" onClick={() => setLayout(ring ? 'row' : 'ring')} title="Switch the town view">
+            {ring ? 'row view' : 'town view'}
+          </button>
           {isAdmin && (
             <label className="god-toggle">
               <input type="checkbox" checked={godView} onChange={(e) => setGodView(e.target.checked)} /> god view
             </label>
           )}
         </div>
+        {ring ? (
+          <TownRing
+            players={view.players}
+            phase={phase}
+            night={night}
+            isAlive={isAlive}
+            meId={me?.id}
+            bubbles={shownBubbles}
+            votes={ringVotes}
+            selected={selected}
+            canTarget={(p) => canTarget(p) && !!me?.alive}
+            onSelect={setSelected}
+            godView={admin}
+            step={step}
+            traps={admin ? traps : new Set()}
+            shotId={shotId}
+          />
+        ) : (
         <div className="town-row">
           {view.players.map((p, i) => {
             const look = lookFor(p);
@@ -295,6 +379,7 @@ export function GamePage({ gameId }: { gameId: string }) {
           })}
           {!view.players.length && <p className="empty-town">The town is empty. Waiting for players…</p>}
         </div>
+        )}
       </section>
 
       <div className="game-body">

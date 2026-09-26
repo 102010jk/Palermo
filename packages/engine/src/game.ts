@@ -18,6 +18,18 @@ import type {
   Winner,
 } from './types.ts';
 
+/** One night action as a trip to a house (for resolution, stats and the night animation). */
+export interface NightVisit {
+  from: string;
+  to: string;
+  kind: NightActionKind;
+  /** Stayed home: self-targeted, or a crazy role (whose actions do nothing). */
+  home: boolean;
+  crazy: boolean;
+  /** Walked into a trap: the action failed. */
+  caught: boolean;
+}
+
 export class GameError extends Error {}
 
 /** Names used as aliases in anonymous games. */
@@ -31,6 +43,17 @@ export const SKIP = 'skip';
 export const PASS = 'pass';
 /** The vote deadline never stretches beyond this, however much people keep talking. */
 export const VOTE_DEADLINE_CAP_SEC = 300;
+/** Visual games: a day lasts at least this long, so people can follow and join in. */
+export const VISUAL_MIN_DAY_SEC = 45;
+/** Visual games: a night lasts at least this long (plus the time to play out the visits). */
+export const VISUAL_MIN_NIGHT_SEC = 12;
+/** Visual games: how long one night visit takes to play out in the god view (walk there, act, walk back). */
+export const VISUAL_VISIT_MS = 5000;
+
+/** How long a chat message stays on screen before the next one (visual games). */
+export function readingTimeMs(text: string): number {
+  return Math.min(12_000, 2_500 + 45 * text.length);
+}
 
 export interface GameOptions {
   seed?: number;
@@ -296,6 +319,47 @@ export class Game {
     return p.role ? ROLES[apparentRole(p.role)].nightAction : null;
   }
 
+  // ---------------------------------------------------------------- visual pacing
+
+  visual(): boolean {
+    return this.settings.gameStyle === 'visual';
+  }
+
+  private speak(p: Player, text: string): GameEvent {
+    const s = this.state;
+    if (this.visual()) s.floorUntil = this.now() + readingTimeMs(text);
+    const ev = this.emit('chat', { scope: 'public' }, `${p.publicName}: ${text}`, { message: text }, p.id);
+    this.extendVoteDeadline();
+    return ev;
+  }
+
+  /** Visual games: the next queued message gets the floor once the previous one has been read. */
+  private releaseSpeech(): GameEvent[] {
+    const s = this.state;
+    if (s.phase !== 'day' || !s.speechQueue?.length || (s.floorUntil ?? 0) > this.now()) return [];
+    while (s.speechQueue.length) {
+      const next = s.speechQueue.shift()!;
+      const p = this.player(next.playerId);
+      if (p?.alive) return [this.speak(p, next.text)];
+    }
+    return [];
+  }
+
+  /**
+   * Visual games: once every night action is in (or time is up), the visits are played out for the god view before
+   * dawn. Actions are locked meanwhile; the night resolves at phaseEndsAt.
+   */
+  private planNight(): GameEvent[] {
+    const s = this.state;
+    if (s.nightPlanned) return [];
+    s.nightPlanned = true;
+    const visits = this.computeVisits();
+    const walking = visits.filter((v) => !v.home).length;
+    const minEnd = (s.phaseStartedAt ?? this.now()) + VISUAL_MIN_NIGHT_SEC * 1000;
+    s.phaseEndsAt = Math.max(this.now() + 2_000 + walking * VISUAL_VISIT_MS, minEnd);
+    return [this.emit('notice', { scope: 'admin' }, 'Night plan (admin).', { kind: 'night_plan', visits, until: s.phaseEndsAt })];
+  }
+
   // ---------------------------------------------------------------- pause
 
   /**
@@ -345,6 +409,10 @@ export class Game {
     s.votes = {};
     s.voteDeadlineAt = null;
     s.voteDeadlineStartedAt = null;
+    s.speechQueue = [];
+    s.floorUntil = null;
+    s.nightPlanned = false;
+    s.dayClosing = false;
     const timeout = phase === 'night' ? this.settings.nightTimeoutSec : phase === 'day' ? this.settings.dayTimeoutSec : null;
     s.phaseEndsAt = timeout ? s.phaseStartedAt + timeout * 1000 : null;
 
@@ -368,8 +436,20 @@ export class Game {
   tick(): GameEvent[] {
     const s = this.state;
     if (s.pausedAt) return [];
-    if (!s.phaseEndsAt || this.now() < s.phaseEndsAt) return [];
-    if (s.phase === 'night') return [this.emit('notice', { scope: 'public' }, 'Time is up for the night.'), ...this.resolveNight()];
+    const released = this.releaseSpeech();
+    if (!s.phaseEndsAt || this.now() < s.phaseEndsAt) return released;
+    if (s.phase === 'night') {
+      if (this.visual() && !s.nightPlanned) {
+        return [...released, this.emit('notice', { scope: 'public' }, 'Time is up for the night.'), ...this.planNight()];
+      }
+      if (s.nightPlanned) return [...released, ...this.resolveNight()];
+      return [...released, this.emit('notice', { scope: 'public' }, 'Time is up for the night.'), ...this.resolveNight()];
+    }
+    if (s.phase === 'day' && s.dayClosing) {
+      // Let the queued messages be heard before the day ends (at most a minute more).
+      if (s.speechQueue?.length && this.now() < s.phaseEndsAt + 60_000) return released;
+      return [...released, ...this.resolveDay()];
+    }
     if (s.phase === 'day') {
       const missing = this.alive()
         .filter((p) => !(p.id in s.votes))
@@ -377,9 +457,9 @@ export class Game {
       const text = s.voteDeadlineAt
         ? `Voting time is up.${missing.length ? ` No vote from: ${missing.join(', ')}.` : ''}`
         : 'Time is up for the day.';
-      return [this.emit('notice', { scope: 'public' }, text), ...this.resolveDay()];
+      return [...released, this.emit('notice', { scope: 'public' }, text), ...this.resolveDay()];
     }
-    return [];
+    return released;
   }
 
   /** Admin: end the current phase now with whatever has been submitted. */
@@ -417,8 +497,22 @@ export class Game {
     this.checkChatLimits(p, text);
     const out = this.emitThought(p, thought, 'chat');
     if (s.phase === 'day') {
-      out.push(this.emit('chat', { scope: 'public' }, `${p.publicName}: ${text}`, { message: text }, p.id));
-      this.extendVoteDeadline();
+      if (this.visual()) {
+        // One voice at a time, so people can read along: the rest waits in a queue.
+        s.speechQueue ??= [];
+        if ((s.floorUntil ?? 0) <= this.now() && !s.speechQueue.length) out.push(this.speak(p, text));
+        else {
+          s.speechQueue.push({ playerId: p.id, text });
+          out.push(
+            this.emit('notice', { scope: 'players', ids: [p.id] }, `Others are speaking: your message is in line (position ${s.speechQueue.length}) and will be heard shortly.`, {
+              kind: 'speech_queued',
+              position: s.speechQueue.length,
+            }, p.id),
+          );
+        }
+        return out;
+      }
+      out.push(this.speak(p, text));
       return out;
     }
     // night: murderers' private chat
@@ -504,6 +598,7 @@ export class Game {
     const p = this.mustPlayer(playerId);
     if (s.phase !== 'night') throw new GameError('Night actions can only be used at night.');
     if (!p.alive) throw new GameError('You are dead.');
+    if (s.nightPlanned) throw new GameError('The night is already under way: actions are locked until dawn.');
     const kind = this.believedKind(p);
     if (!kind) throw new GameError('Your role has no night action. Just wait for the day.');
     let targetId: string;
@@ -542,7 +637,7 @@ export class Game {
         p.id,
       ),
     );
-    if (this.nightComplete()) out.push(...this.resolveNight());
+    if (this.nightComplete()) out.push(...(this.visual() ? this.planNight() : this.resolveNight()));
     return out;
   }
 
@@ -574,24 +669,11 @@ export class Game {
    * protections, kills and finally information (tracker, trapper). Crazy roles never leave home: their actions do
    * nothing and their reports are always wrong.
    */
-  private resolveNight(): GameEvent[] {
+  /** Who goes where tonight and who walks into a trap (pure: no state changes). */
+  computeVisits(): NightVisit[] {
     const s = this.state;
-    s.lastTrapped ??= {};
-    const out: GameEvent[] = [];
-    const name = (id: string) => this.player(id)!.publicName;
-    const aliveAtNight = this.alive();
-
-    interface Visit {
-      from: string;
-      to: string;
-      kind: NightActionKind;
-      /** Stayed home: self-targeted, or a crazy role. */
-      home: boolean;
-      crazy: boolean;
-      caught: boolean;
-    }
     const shared = this.settings.killMode === 'shared' ? this.murderTarget() : null;
-    const visits: Visit[] = [];
+    const visits: NightVisit[] = [];
     for (const [pid, c] of Object.entries(s.nightChoices)) {
       if (c.target === PASS) continue;
       const p = this.player(pid)!;
@@ -599,7 +681,28 @@ export class Game {
       if (c.kind === 'kill' && shared && p.role === 'murderer' && shared.killer !== pid) continue;
       const crazy = isCrazy(p.role);
       visits.push({ from: pid, to: c.target, kind: c.kind, home: crazy || c.target === pid, crazy, caught: false });
-      // Bookkeeping is the same for crazy roles, so their options look exactly like the real role's.
+    }
+    // Traps: every visitor of a trapped house walks into it (owners inside their own house do not).
+    const trapped = new Set(visits.filter((v) => v.kind === 'trap' && !v.crazy).map((v) => v.to));
+    for (const v of visits) if (!v.crazy && !v.home && v.kind !== 'trap' && trapped.has(v.to)) v.caught = true;
+    return visits;
+  }
+
+  /**
+   * Night resolution. Every action is a visit to a house: traps first (every visitor of a trapped house fails), then
+   * protections, kills and finally information (tracker, trapper). Crazy roles never leave home: their actions do
+   * nothing and their reports are always wrong.
+   */
+  private resolveNight(): GameEvent[] {
+    const s = this.state;
+    s.lastTrapped ??= {};
+    const out: GameEvent[] = [];
+    const name = (id: string) => this.player(id)!.publicName;
+    const aliveAtNight = this.alive();
+    const visits = this.computeVisits();
+    // Bookkeeping is the same for crazy roles, so their options look exactly like the real role's.
+    for (const [pid, c] of Object.entries(s.nightChoices)) {
+      if (c.target === PASS) continue;
       if (c.kind === 'protect') {
         s.lastProtected[pid] = c.target;
         if (c.target === pid && !s.selfProtectUsed.includes(pid)) s.selfProtectUsed.push(pid);
@@ -613,10 +716,6 @@ export class Game {
       if (kind === 'trap') delete s.lastTrapped[p.id];
     }
 
-    // 1. Traps: every visitor of a trapped house walks into it (owners inside their own house do not).
-    const traps = new Map<string, string[]>();
-    for (const v of visits) if (v.kind === 'trap' && !v.crazy) traps.set(v.to, [...(traps.get(v.to) ?? []), v.from]);
-    for (const v of visits) if (!v.crazy && !v.home && v.kind !== 'trap' && traps.has(v.to)) v.caught = true;
     for (const v of visits.filter((x) => x.caught)) {
       const failed = { kill: 'You killed nobody.', protect: 'You protected nobody.', track: 'You learned nothing.', trap: '' }[v.kind];
       out.push(
@@ -759,7 +858,7 @@ export class Game {
     );
     const win = this.checkWin();
     if (win) return [...out, ...this.endGame(win.winner, win.reason)];
-    if (Object.keys(s.votes).length >= this.alive().length) out.push(...this.resolveDay());
+    if (Object.keys(s.votes).length >= this.alive().length) out.push(...this.everyoneVoted());
     return out;
   }
 
@@ -809,9 +908,22 @@ export class Game {
     if (!this.settings.publicVotes) {
       out.push(this.emit('notice', { scope: 'public' }, `${voted}/${alive} players have voted.`, { voted, alive }));
     }
-    if (voted >= alive) out.push(...this.resolveDay());
+    if (voted >= alive) out.push(...this.everyoneVoted());
     else out.push(...this.maybeStartVoteDeadline(voted, alive));
     return out;
+  }
+
+  /** Everyone alive has voted: the day ends now, or in visual games once it lasted long enough to follow. */
+  private everyoneVoted(): GameEvent[] {
+    const s = this.state;
+    if (!this.visual()) return this.resolveDay();
+    if (s.dayClosing) return [];
+    const minEnd = (s.phaseStartedAt ?? this.now()) + VISUAL_MIN_DAY_SEC * 1000;
+    const end = Math.max(this.now() + 5_000, minEnd);
+    s.dayClosing = true;
+    s.phaseEndsAt = s.phaseEndsAt ? Math.min(s.phaseEndsAt, end) : end;
+    const sec = Math.round((s.phaseEndsAt - this.now()) / 1000);
+    return [this.emit('notice', { scope: 'public' }, `Everyone has voted. The day ends in ${sec} s; votes can still change.`, { kind: 'day_closing', until: s.phaseEndsAt })];
   }
 
   /** Stall guard: two thirds have voted, the rest have until the chat has been quiet for settings.voteDeadlineSec. */
@@ -839,7 +951,7 @@ export class Game {
   private extendVoteDeadline(): void {
     const s = this.state;
     const sec = this.settings.voteDeadlineSec;
-    if (!sec || !s.voteDeadlineStartedAt || s.phase !== 'day') return;
+    if (!sec || !s.voteDeadlineStartedAt || s.phase !== 'day' || s.dayClosing) return;
     const cap = s.voteDeadlineStartedAt + Math.max(sec, VOTE_DEADLINE_CAP_SEC) * 1000;
     const dayEnd = this.settings.dayTimeoutSec && s.phaseStartedAt ? s.phaseStartedAt + this.settings.dayTimeoutSec * 1000 : Infinity;
     s.voteDeadlineAt = Math.min(this.now() + sec * 1000, cap, dayEnd);

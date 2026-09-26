@@ -33,6 +33,11 @@ export interface GameSettings {
    * 'shared': the murderers agree on one victim per night (older games).
    */
   killMode: 'separate' | 'shared';
+  /**
+   * 'visual': paced for people watching or playing (one chat message at a time, night visits played out for the
+   * god view, days last a little); 'simulation': as fast as the players are.
+   */
+  gameStyle: 'visual' | 'simulation';
   startPhase: 'night' | 'day';
   /** Reveal the role of a player when they die. */
   revealRoleOnDeath: boolean;
@@ -165,6 +170,13 @@ export interface GameState {
   /** Set once the vote deadline started this day (see settings.voteDeadlineSec). */
   voteDeadlineAt?: number | null;
   voteDeadlineStartedAt?: number | null;
+  /** Visual games: chat messages waiting to be spoken, and until when the current one is on screen. */
+  speechQueue?: { playerId: string; text: string }[];
+  floorUntil?: number | null;
+  /** Visual games: the night is being played out (actions locked) and resolves at phaseEndsAt. */
+  nightPlanned?: boolean;
+  /** Visual games: everyone voted, the day ends at phaseEndsAt. */
+  dayClosing?: boolean;
   /** playerId -> chat messages sent in the current phase (for chat limits). */
   messagesThisPhase?: Record<string, number>;
   /** playerId -> time of the last chat message (for the cooldown). */

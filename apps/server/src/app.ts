@@ -503,6 +503,7 @@ export function sanitizeSettings(input: Record<string, unknown>): Partial<GameSe
     out.roleCounts = Object.keys(counts).length ? (counts as GameSettings['roleCounts']) : null;
   }
   if (input.killMode === 'separate' || input.killMode === 'shared') out.killMode = input.killMode;
+  if (input.gameStyle === 'visual' || input.gameStyle === 'simulation') out.gameStyle = input.gameStyle;
   if (input.startPhase === 'day' || input.startPhase === 'night') out.startPhase = input.startPhase;
   if (input.identityVisibility === 'visible' || input.identityVisibility === 'anonymous') out.identityVisibility = input.identityVisibility;
   if (['none', 'own', 'shared'].includes(String(input.notesMode))) out.notesMode = input.notesMode as GameSettings['notesMode'];

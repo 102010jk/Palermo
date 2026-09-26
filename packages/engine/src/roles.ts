@@ -174,6 +174,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   roles: 'auto',
   roleCounts: null,
   killMode: 'separate',
+  gameStyle: 'simulation',
   startPhase: 'night',
   revealRoleOnDeath: true,
   publicVotes: true,
