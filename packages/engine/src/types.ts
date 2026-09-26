@@ -45,6 +45,11 @@ export interface GameSettings {
   maxMessagesPerPhase: number | null;
   /** Minimum seconds between two messages of the same player (anti-spam). */
   chatCooldownSec: number | null;
+  /**
+   * Stall guard: once two thirds of the living players have voted, the rest get this many seconds, then the day
+   * ends with the votes cast so far. null = off (the day waits for every living player).
+   */
+  voteDeadlineSec: number | null;
   /** Server starts the game automatically once enough players joined and everyone is ready. */
   autoStart: boolean;
   /** Target seat count used together with autoStart (0 = any count >= minPlayers). */
@@ -134,6 +139,8 @@ export interface GameState {
   nightChoices: Record<string, NightChoice>;
   /** playerId -> target playerId or 'skip' for the current day. */
   votes: Record<string, string>;
+  /** Set once the vote deadline started this day (see settings.voteDeadlineSec). */
+  voteDeadlineAt?: number | null;
   /** playerId -> chat messages sent in the current phase (for chat limits). */
   messagesThisPhase?: Record<string, number>;
   /** playerId -> time of the last chat message (for the cooldown). */

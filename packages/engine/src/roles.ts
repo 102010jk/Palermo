@@ -101,6 +101,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   maxMessageLength: null,
   maxMessagesPerPhase: null,
   chatCooldownSec: null,
+  voteDeadlineSec: 120,
   autoStart: false,
   seats: 0,
   aiPool: true,

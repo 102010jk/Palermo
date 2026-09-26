@@ -217,6 +217,39 @@ describe('day', () => {
     expect(g.alive()).toHaveLength(5);
   });
 
+  it('stall guard: after two thirds voted, the rest get voteDeadlineSec, then the day resolves', () => {
+    const { g, m, d, t, cs, advance } = toDay();
+    // 5 alive: the deadline starts at the 4th vote (4 * 3 >= 5 * 2), not at the 3rd.
+    g.vote(d.id, m.id);
+    g.vote(t.id, m.id);
+    g.vote(cs[1].id, m.id);
+    expect(g.state.phaseEndsAt).toBeNull();
+    const events = g.vote(cs[2].id, m.id);
+    expect(events.some((e) => e.text.includes(`${g.player(m.id)!.publicName}: vote within 120 s`))).toBe(true);
+    advance(119_000);
+    expect(g.tick()).toEqual([]);
+    advance(2_000);
+    g.tick();
+    // The murderer never voted, but 4 votes against them still count.
+    expect(g.state.phase).toBe('ended');
+    expect(g.state.winner).toBe('town');
+  });
+
+  it('no stall guard when voteDeadlineSec is off', () => {
+    const s = setup(['murderer', 'doctor', 'tracker', 'civilian', 'civilian', 'civilian'], { voteDeadlineSec: null });
+    const [m] = s.byRole('murderer');
+    const [d] = s.byRole('doctor');
+    const [t] = s.byRole('tracker');
+    const cs = s.byRole('civilian');
+    s.g.nightAction(m.id, cs[0].id);
+    s.g.nightAction(d.id, t.id);
+    s.g.nightAction(t.id, m.id);
+    for (const p of s.g.alive().filter((x) => x.id !== m.id && x.id !== cs[1].id)) s.g.vote(p.id, m.id);
+    s.advance(3_600_000);
+    s.g.tick();
+    expect(s.g.state.phase).toBe('day');
+  });
+
   it('cannot vote for self or dead players', () => {
     const { g, d, cs } = toDay();
     expect(() => g.vote(d.id, d.id)).toThrow(GameError);

@@ -43,6 +43,9 @@ export function formatStatus(g: Game, playerId: string): string {
   if (g.state.phaseEndsAt) {
     const sec = Math.max(0, Math.round((g.state.phaseEndsAt - Date.now()) / 1000));
     lines.push(`Time left in this phase: ${sec}s`);
+    if (g.state.phase === 'day' && g.state.voteDeadlineAt && v.you?.alive && !(v.you.name in v.votes)) {
+      lines.push(`You have NOT voted yet. Vote now (vote tool): in ${sec}s the day ends without your vote.`);
+    }
   }
   const c = v.chat;
   if (v.you?.alive && (c.maxLength || c.left !== null || g.settings.chatCooldownSec)) {

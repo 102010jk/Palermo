@@ -181,7 +181,7 @@ async function runOnce(ctx: AgentContext, launch: Launch, cmd: string, modelArgs
         sid = m.conversation_id ?? sid;
         const init = m.init ?? {};
         const tools: string[] = Array.isArray(init.tools) ? init.tools.map(String) : [];
-        palermoLoaded = tools.some((t) => /palermo/i.test(t) || /wait_for_events/.test(t));
+        palermoLoaded = tools.some((t) => /palermo|wait_for_events|call_mcp_tool/i.test(t));
         ctx.log(`conversation ${sid}, model ${init.model ?? '?'}, permissions ${init.permission_mode ?? '?'}, ${tools.length} tools`);
         if (!palermoLoaded && tools.length) ctx.log(`⚠️  no palermo tools among: ${short(tools.join(', '), 300)}`);
         if (init.model) ctx.reportModel(String(init.model));
@@ -193,12 +193,18 @@ async function runOnce(ctx: AgentContext, launch: Launch, cmd: string, modelArgs
           if (s.state === 'DONE') flush();
         } else if (s.step_type === 'tool') {
           const info = s.tool_info ?? {};
-          const name = String(info.name ?? s.tool_name ?? '');
-          const isGame = PALERMO_TOOLS.test(name) || /palermo/i.test(name);
+          let name = String(info.name ?? s.tool_name ?? '');
+          let params = info.parameters ?? {};
+          // agy wraps MCP calls: call_mcp_tool {ServerName, ToolName, Arguments}.
+          if (/call_mcp_tool/i.test(name) && params && typeof params === 'object') {
+            if (/palermo/i.test(String(params.ServerName ?? ''))) name = `palermo/${params.ToolName ?? '?'}`;
+            params = params.Arguments ?? {};
+          }
+          const isGame = /palermo/i.test(name) || PALERMO_TOOLS.test(name);
           if (!seenTools.has(s.step_index)) {
             seenTools.add(s.step_index);
             flush();
-            ctx.log(`🔧 ${name.replace(/^.*[/_]palermo[/_]+|^palermo[/_]+/, '')} ${short(JSON.stringify(info.parameters ?? {}), 200)}`);
+            ctx.log(`🔧 ${name.replace(/^.*[/_]palermo[/_]+|^palermo[/_]+/, '')} ${short(JSON.stringify(params), 200)}`);
           }
           if (s.state === 'DONE') {
             if (info.error) {
@@ -234,7 +240,7 @@ async function runOnce(ctx: AgentContext, launch: Launch, cmd: string, modelArgs
       `agy blocked the palermo game tools (${deniedTool}). Update agy (\`agy update\`), check that ${USER_SETTINGS} ` +
       'has "mcp(palermo/*)" in permissions.allow, or as a last resort add "extraArgs": ["--dangerously-skip-permissions"] to this player';
   }
-  if (!fatal && palermoLoaded === false && palermoCalls === 0) {
+  if (!fatal && palermoLoaded === false && palermoCalls === 0 && seenTools.size === 0) {
     fatal = `agy did not load the palermo MCP server from ${join(ctx.workdir, '.agents', 'mcp_config.json')} (see bridge.log next to it)`;
   }
   if (!fatal && spawnFailed) fatal = `agy could not be started ("${cmd}") – is the Antigravity CLI installed and on PATH?`;

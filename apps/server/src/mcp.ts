@@ -180,7 +180,8 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
         'when you are mentioned, when you are the last one to vote, when min_new_messages arrived, or a few ' +
         'seconds after the chat goes quiet. The defaults are good; long waits are cheap.',
       inputSchema: {
-        max_wait_seconds: z.number().int().min(1).max(120).default(110),
+        // Larger values are clamped (some models ask for 600 s); the server wakes agents early anyway.
+        max_wait_seconds: z.number().min(1).default(110).transform((n) => Math.min(120, Math.round(n))),
         min_new_messages: z.number().int().min(1).max(50).default(2).describe('Wake after this many new messages (raise it to save tokens)'),
         wake_on_mention: z.boolean().default(true),
       },

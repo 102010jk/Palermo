@@ -270,6 +270,7 @@ export class Game {
     s.nightChoices = {};
     s.messagesThisPhase = {};
     s.votes = {};
+    s.voteDeadlineAt = null;
     const timeout = phase === 'night' ? this.settings.nightTimeoutSec : phase === 'day' ? this.settings.dayTimeoutSec : null;
     s.phaseEndsAt = timeout ? s.phaseStartedAt + timeout * 1000 : null;
 
@@ -294,7 +295,15 @@ export class Game {
     const s = this.state;
     if (!s.phaseEndsAt || this.now() < s.phaseEndsAt) return [];
     if (s.phase === 'night') return [this.emit('notice', { scope: 'public' }, 'Time is up for the night.'), ...this.resolveNight()];
-    if (s.phase === 'day') return [this.emit('notice', { scope: 'public' }, 'Time is up for the day.'), ...this.resolveDay()];
+    if (s.phase === 'day') {
+      const missing = this.alive()
+        .filter((p) => !(p.id in s.votes))
+        .map((p) => p.publicName);
+      const text = s.voteDeadlineAt
+        ? `Voting time is up.${missing.length ? ` No vote from: ${missing.join(', ')}.` : ''}`
+        : 'Time is up for the day.';
+      return [this.emit('notice', { scope: 'public' }, text), ...this.resolveDay()];
+    }
     return [];
   }
 
@@ -580,7 +589,28 @@ export class Game {
       out.push(this.emit('notice', { scope: 'public' }, `${voted}/${alive} players have voted.`, { voted, alive }));
     }
     if (voted >= alive) out.push(...this.resolveDay());
+    else out.push(...this.maybeStartVoteDeadline(voted, alive));
     return out;
+  }
+
+  /** Stall guard: two thirds have voted, the others get settings.voteDeadlineSec to vote. */
+  private maybeStartVoteDeadline(voted: number, alive: number): GameEvent[] {
+    const s = this.state;
+    const sec = this.settings.voteDeadlineSec;
+    if (!sec || s.voteDeadlineAt || voted * 3 < alive * 2) return [];
+    s.voteDeadlineAt = this.now() + sec * 1000;
+    if (!s.phaseEndsAt || s.voteDeadlineAt < s.phaseEndsAt) s.phaseEndsAt = s.voteDeadlineAt;
+    const missing = this.alive()
+      .filter((p) => !(p.id in s.votes))
+      .map((p) => p.publicName);
+    return [
+      this.emit(
+        'notice',
+        { scope: 'public' },
+        `${voted}/${alive} have voted. ${missing.join(', ')}: vote within ${sec} s, otherwise the day ends with the votes cast so far.`,
+        { deadline: s.voteDeadlineAt, missing },
+      ),
+    ];
   }
 
   tally(): { counts: Record<string, number>; eliminated: string | null; tie: boolean } {

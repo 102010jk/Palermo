@@ -377,6 +377,21 @@ export class Db {
       );
   }
 
+  /** Removes a game and everything recorded about it (events, seats, reports, usage, audit, playbook versions). */
+  deleteGame(id: string): void {
+    this.sql.exec('BEGIN');
+    try {
+      for (const table of ['events', 'game_players', 'reports', 'usage', 'audit', 'notes']) {
+        this.sql.prepare(`DELETE FROM ${table} WHERE game_id = ?`).run(id);
+      }
+      this.sql.prepare('DELETE FROM games WHERE id = ?').run(id);
+      this.sql.exec('COMMIT');
+    } catch (e) {
+      this.sql.exec('ROLLBACK');
+      throw e;
+    }
+  }
+
   audit(gameId: string | null, accountId: string | null, kind: string, detail: string): void {
     this.sql
       .prepare('INSERT INTO audit (game_id, account_id, kind, detail, created_at) VALUES (?,?,?,?,?)')

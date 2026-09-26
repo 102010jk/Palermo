@@ -177,5 +177,17 @@ describe('server', () => {
     await api('DELETE', `/api/admin/pool/picks/${late.pickId}`);
     await api('POST', `/api/games/${game}/abort`, {});
   });
+
+  it('deletes a stopped game with everything recorded about it, but not a running one', async () => {
+    const id = (await api('POST', '/api/games', { settings: { mode: 'to-delete', seats: 3 } })).body.id;
+    await api('POST', `/api/games/${id}/bots`, { count: 3 });
+    await api('POST', `/api/games/${id}/start`, { force: true });
+    expect((await api('DELETE', `/api/games/${id}`)).status).toBe(400);
+    await api('POST', `/api/games/${id}/abort`, {});
+    expect((await api('DELETE', `/api/games/${id}`)).status).toBe(200);
+    expect((await api('GET', `/api/games/${id}`)).status).toBe(404);
+    expect((await api('GET', '/api/games')).body.some((g: { id: string }) => g.id === id)).toBe(false);
+    expect(app.db.sql.prepare('SELECT COUNT(*) AS n FROM events WHERE game_id = ?').get(id)).toEqual({ n: 0 });
+  });
 });
 

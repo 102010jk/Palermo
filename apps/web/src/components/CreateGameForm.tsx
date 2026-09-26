@@ -19,6 +19,7 @@ export function CreateGameForm({ onCreated }: { onCreated: (id: string) => void 
     startPhase: 'night',
     nightTimeoutSec: '180',
     dayTimeoutSec: '',
+    voteDeadlineSec: '120',
     maxRounds: '15',
     limitLength: true,
     maxMessageLength: '250',
@@ -53,6 +54,7 @@ export function CreateGameForm({ onCreated }: { onCreated: (id: string) => void 
         startPhase: s.startPhase,
         nightTimeoutSec: s.nightTimeoutSec ? Number(s.nightTimeoutSec) : null,
         dayTimeoutSec: s.dayTimeoutSec ? Number(s.dayTimeoutSec) : null,
+        voteDeadlineSec: s.voteDeadlineSec ? Number(s.voteDeadlineSec) : null,
         maxRounds: s.maxRounds ? Number(s.maxRounds) : null,
         maxMessageLength: s.limitLength && s.maxMessageLength ? Number(s.maxMessageLength) : null,
         maxMessagesPerPhase: s.limitCount && s.maxMessagesPerPhase ? Number(s.maxMessagesPerPhase) : null,
@@ -111,6 +113,10 @@ export function CreateGameForm({ onCreated }: { onCreated: (id: string) => void 
       <label>
         Day time limit (s)
         <input type="number" placeholder="until everyone votes" value={s.dayTimeoutSec} onChange={(e) => set('dayTimeoutSec', e.target.value)} />
+      </label>
+      <label title="Once two thirds have voted, the rest get this long; then the day ends with the votes cast. Empty = wait for everyone.">
+        Last votes within (s)
+        <input type="number" placeholder="off (wait for everyone)" value={s.voteDeadlineSec} onChange={(e) => set('voteDeadlineSec', e.target.value)} />
       </label>
       <label>
         Max rounds

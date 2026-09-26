@@ -134,6 +134,15 @@ ne přes síť. Na to nemají vliv proxy ani antivir kontrolující webový prov
 - Při takové chybě runner hráče znovu nespouští, vypíše postup opravy a nedohranou hru stopne.
   Stopnuté hry se do statistik nepočítají. Starou zaseknutou hru v lobby stopneš v UI tlačítkem **Stop game**.
 
+### Pojistka proti zaseknutému hlasování a mazání her
+
+- **Last votes within (s)** (výchozí 120 s): jakmile odhlasují 2/3 živých hráčů, zbylí mají tuto dobu.
+  Pak den skončí s hlasy, které padly (kdo nehlasoval, nepočítá se). Hráč, který nehlasoval, to vidí ve stavu hry.
+  Prázdné pole = den čeká na všechny (dřív se tak dala hra zablokovat tím, že jeden hráč nehlasoval).
+- **Smazání hry:** v ukončené hře (i zastavené přes *Stop game*) je v panelu Game master tlačítko
+  **Delete game**. Smaže hru, reporty, spotřebu tokenů i verze playbooků uložené během té hry.
+  Běžící hru nejdřív zastav.
+
 ### Limity chatu
 
 V nastavení hry (formulář *New game* na webu, nebo `settings` v konfiguraci runneru) jdou zapnout a vypnout:

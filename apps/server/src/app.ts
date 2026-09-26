@@ -312,6 +312,15 @@ export function createPalermo(cfg: AppConfig): PalermoApp {
     for (let i = 0; i < n; i++) ids.push(manager.addBot(id));
     return { ids };
   }));
+  app.delete(
+    '/api/games/:id',
+    wrap((req) => {
+      requireAdmin(req);
+      manager.deleteGame(String(req.params.id));
+      manager.emit('games');
+      return { ok: true };
+    }),
+  );
   app.post('/api/games/:id/kick', adminAction((id, b) => void manager.apply(id, (g) => g.removePlayer(String(b.playerId)))));
 
   app.get('/api/games/:id/reports', wrap((req) => db.reports(String(req.params.id))));
@@ -447,7 +456,7 @@ export class HttpError extends Error {
 }
 
 const BOOL_KEYS = ['revealRoleOnDeath', 'publicVotes', 'allowSkipVote', 'freedomMode', 'doctorNoRepeat', 'doctorLearnsSave', 'autoStart', 'announceRoles', 'aiPool'] as const;
-const NUM_OR_NULL = ['nightTimeoutSec', 'dayTimeoutSec', 'maxRounds', 'maxMessageLength', 'maxMessagesPerPhase', 'chatCooldownSec'] as const;
+const NUM_OR_NULL = ['nightTimeoutSec', 'dayTimeoutSec', 'maxRounds', 'maxMessageLength', 'maxMessagesPerPhase', 'chatCooldownSec', 'voteDeadlineSec'] as const;
 
 /** Accept only known settings with sane types from the admin UI / runner. */
 export function sanitizeSettings(input: Record<string, unknown>): Partial<GameSettings> {

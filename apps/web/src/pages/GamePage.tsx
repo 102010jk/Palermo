@@ -82,7 +82,7 @@ function fmtTime(ms: number) {
 }
 
 export function GamePage({ gameId }: { gameId: string }) {
-  const { isAdmin, account } = useApp();
+  const { isAdmin, account, navigate } = useApp();
   const [view, setView] = useState<PlayerView | null>(null);
   const [events, setEvents] = useState<GameEvent[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
@@ -463,6 +463,23 @@ export function GamePage({ gameId }: { gameId: string }) {
                 {view.phase !== 'ended' && (
                   <button className="danger" onClick={() => confirm('Stop this game?') && adminAct('abort')}>
                     Stop game
+                  </button>
+                )}
+                {view.phase === 'ended' && (
+                  <button
+                    className="danger"
+                    title="Removes the game, its reports, token usage and the playbook versions saved during it"
+                    onClick={async () => {
+                      if (!confirm('Delete this game from the records? Its reports, token usage and the playbook versions saved in it go too.')) return;
+                      try {
+                        await api('DELETE', `/api/games/${gameId}`, undefined, { admin: true });
+                        navigate('/');
+                      } catch (e) {
+                        setError((e as Error).message);
+                      }
+                    }}
+                  >
+                    Delete game
                   </button>
                 )}
               </div>

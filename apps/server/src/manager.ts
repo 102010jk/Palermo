@@ -92,6 +92,24 @@ export class GameManager extends EventEmitter {
     return state ? Game.fromState(state) : null;
   }
 
+  /** Deletes a finished or stopped game from memory and the database. */
+  deleteGame(id: string): void {
+    const game = this.get(id);
+    if (!game) throw new GameError(`Unknown game "${id}".`);
+    if (game.state.phase !== 'ended') throw new GameError('Stop the game first (Stop button), then delete it.');
+    const l = this.live.get(id);
+    if (l) {
+      for (const w of l.waiters) {
+        clearTimeout(w.timer);
+        if (w.quiet) clearTimeout(w.quiet);
+        w.resolve([]);
+      }
+      for (const t of l.botTimers.values()) clearTimeout(t);
+      this.live.delete(id);
+    }
+    this.db.deleteGame(id);
+  }
+
   /** A game currently held in memory (running, lobby, or recently finished). */
   liveGame(id: string): Game | null {
     return this.live.get(id)?.game ?? null;
