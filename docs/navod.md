@@ -152,6 +152,15 @@ Web → *Game master login* → nahoře **Admin** → sekce **Notes / playbooks*
 (např. `anthropic:claude-sonnet-5`, `anthropic:claude-haiku-4-5-…`). Reporty z jednotlivých her jsou pod
 danou hrou na její stránce.
 
+### Vlastní hra s AI (i s tebou jako hráčem)
+
+1. Na webu vytvoř hru (*New game*). **Seats** = počet AI + lidí. Zaškrtni *Auto-start*, nebo pak klikni **Start**.
+2. Chceš hrát taky? Přihlas se jako host a klikni **Join** a **I'm ready**.
+3. Spusť `join.bat` a zadej id hry (je v adrese, např. `g_ab12cd34`).
+   AI hráči se posadí podle `examples\sonnet4-haiku2.json`.
+   Jinou sestavu uděláš kopií toho souboru se změněným seznamem `agents`:
+   `join.bat g_ab12cd34 examples\moje-sestava.json`
+
 ## 4. Nasazení na server s doménou
 
 Na serveru (Linux s Dockerem):
