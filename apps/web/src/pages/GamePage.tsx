@@ -3,6 +3,7 @@ import { ROLES, type GameEvent, type NightVisit, type PlayerView, type PublicPla
 import { api, download, getSocket } from '../api.ts';
 import { useApp } from '../App.tsx';
 import { Character, Grave, House, LOOKS, lookFor } from '../components/Sprites.tsx';
+import { Stage, useStage, type StageLine } from '../components/Stage.tsx';
 import { TownRing, type Bubble, type NightStep } from '../components/TownRing.tsx';
 
 interface Report {
@@ -97,6 +98,7 @@ export function GamePage({ gameId }: { gameId: string }) {
   const [reports, setReports] = useState<Report[]>([]);
   const [godView, setGodView] = useState(true);
   const [bubbles, setBubbles] = useState<Record<string, Bubble>>({});
+  const stage = useStage();
   const [replay, setReplay] = useState<{ idx: number; playing: boolean; speed: number } | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -118,6 +120,8 @@ export function GamePage({ gameId }: { gameId: string }) {
     const onSnapshot = (p: { view: PlayerView; events: GameEvent[] }) => {
       setView(p.view);
       setEvents(p.events);
+      // History is in the log; the stage only plays what is said from now on.
+      stage.reset(p.events[p.events.length - 1]?.seq ?? 0);
     };
     const onUpdate = (p: { view: PlayerView; events: GameEvent[] }) => {
       setView(p.view);
@@ -126,6 +130,7 @@ export function GamePage({ gameId }: { gameId: string }) {
         const seen = new Set(prev.map((e) => e.seq));
         return [...prev, ...p.events.filter((e) => !seen.has(e.seq))];
       });
+      stage.push(p.events);
       const now = Date.now();
       setBubbles((b) => {
         const next = { ...b };
@@ -198,6 +203,30 @@ export function GamePage({ gameId }: { gameId: string }) {
   const winner = replayState ? replayState.winner : view?.winner;
   const night = phase === 'night';
   const shownBubbles = replayState?.bubble ?? bubbles;
+  // Replays: the stage shows the latest line said so far.
+  const replayLine = useMemo(() => {
+    if (!replay) return null;
+    const e = [...shownEvents].reverse().find((x) => (x.type === 'chat' || x.type === 'team_chat') && x.actor && x.phase !== 'lobby');
+    if (!e) return null;
+    const line: StageLine & { start: number } = {
+      seq: e.seq,
+      actor: e.actor!,
+      text: String(e.data.message ?? ''),
+      kind: e.type === 'chat' ? 'chat' : 'team',
+      ms: 1,
+      start: 0,
+    };
+    return line;
+  }, [replay, shownEvents]);
+  // Town view: only the current speaker has a speech bubble (the whole text is on the stage below), thoughts are markers.
+  const ringBubbles = useMemo(() => {
+    if (replayState) return shownBubbles;
+    const out: Record<string, Bubble> = {};
+    for (const [id, b] of Object.entries(bubbles)) if (b.kind === 'thought') out[id] = b;
+    const c = stage.current;
+    if (c && stage.speaking) out[c.actor] = { text: c.text, kind: c.kind, at: c.start, forgedBy: c.forgedBy };
+    return out;
+  }, [replayState, shownBubbles, bubbles, stage.current, stage.speaking]);
 
   const voteCounts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -334,7 +363,7 @@ export function GamePage({ gameId }: { gameId: string }) {
             night={night}
             isAlive={isAlive}
             meId={me?.id}
-            bubbles={shownBubbles}
+            bubbles={ringBubbles}
             votes={ringVotes}
             selected={selected}
             canTarget={(p) => canTarget(p) && !!me?.alive}
@@ -383,6 +412,17 @@ export function GamePage({ gameId }: { gameId: string }) {
           })}
           {!view.players.length && <p className="empty-town">The town is empty. Waiting for players…</p>}
         </div>
+        )}
+        {ring && phase !== 'lobby' && (
+          <Stage
+            line={replay ? replayLine : stage.current}
+            speaking={!replay && stage.speaking}
+            still={!!replay}
+            queued={replay ? [] : stage.queued}
+            waiting={replay ? [] : view.speechQueue ?? []}
+            players={view.players}
+            godView={admin}
+          />
         )}
       </section>
 

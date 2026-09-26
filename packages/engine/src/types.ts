@@ -255,6 +255,8 @@ export interface PlayerView {
   winner: Winner | null;
   isAdmin: boolean;
   paused: { since: number; reason: string } | null;
+  /** Visual games: names of the players whose messages wait for the floor, in order. */
+  speechQueue: string[];
   you: {
     id: string;
     name: string;

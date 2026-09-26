@@ -1237,6 +1237,7 @@ export class Game {
       winner: s.winner,
       isAdmin,
       paused: s.pausedAt ? { since: s.pausedAt, reason: s.pauseReason ?? '' } : null,
+      speechQueue: (s.speechQueue ?? []).map((q) => this.player(q.playerId)?.publicName ?? '?'),
       you: me
         ? {
             id: me.id,

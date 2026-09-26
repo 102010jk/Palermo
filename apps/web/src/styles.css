@@ -1312,6 +1312,10 @@ button:focus-visible {
   outline: 2px dashed rgba(255, 255, 255, 0.5);
   outline-offset: 2px;
 }
+.ring-person:disabled {
+  /* Not clickable is not faded: only real states (dead, inside) change how people look. */
+  opacity: 1;
+}
 .ring-person.inside .figure {
   opacity: 0;
 }
@@ -1664,4 +1668,120 @@ button:focus-visible {
 .voice-card input {
   flex: 1;
   min-width: 160px;
+}
+
+/* Stage: the current speaker's whole message under the town, one line at a time. */
+.stage {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin: 8px 12px 12px;
+  padding: 10px 14px;
+  min-height: 92px;
+  background: #fffdf5;
+  color: #1a1624;
+  border: 3px solid #1a1624;
+  border-radius: 8px;
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.35);
+  animation: pop 0.15s steps(2);
+  transition: opacity 0.4s;
+}
+.stage.empty {
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  opacity: 0.6;
+  animation: none;
+}
+.stage.done {
+  opacity: 0.75;
+}
+.stage.team {
+  background: #ffe9e5;
+}
+.stage.forged {
+  outline: 3px dashed #e0609e;
+  outline-offset: 2px;
+}
+.stage-avatar {
+  flex: none;
+  width: 48px;
+  display: flex;
+  justify-content: center;
+  padding-top: 2px;
+}
+.stage-body {
+  flex: 1;
+  min-width: 0;
+}
+.stage-who {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-family: var(--ui);
+  font-size: 0.9rem;
+  margin-bottom: 2px;
+}
+.stage-text {
+  margin: 0;
+  font-family: var(--ui);
+  font-size: 1.05rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.stage-thought {
+  margin: 6px 0 0;
+  font-size: 0.85rem;
+  color: #5a4f7a;
+  border-left: 3px solid #b194ff;
+  padding-left: 8px;
+}
+.stage-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+.stage-bar {
+  flex: 1;
+  height: 4px;
+  background: rgba(26, 22, 36, 0.12);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.stage-bar span {
+  display: block;
+  height: 100%;
+  background: #1a1624;
+  transition: width 0.2s linear;
+}
+.stage-next {
+  color: #5a5470;
+  white-space: nowrap;
+}
+.think-mark {
+  position: absolute;
+  bottom: calc(100% + 2px);
+  right: -6px;
+  font-size: 1rem;
+  cursor: help;
+  animation: pop 0.3s ease-out;
+  filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.8));
+}
+.ring-person .bubble {
+  z-index: 400;
+}
+@media (max-width: 600px) {
+  .stage {
+    margin: 6px 4px 8px;
+    padding: 8px;
+  }
+  .stage-avatar {
+    display: none;
+  }
+  .stage-text {
+    font-size: 0.95rem;
+  }
 }

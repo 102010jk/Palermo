@@ -179,7 +179,8 @@ export function TownRing(props: Props) {
         const walking = !!step;
         const hidden = night && alive && !props.godView && !walking;
         const votes = voteCount.get(p.id) ?? 0;
-        const style: CSSProperties = { left: `${pos.x}%`, top: `${pos.y}%`, zIndex: 100 + Math.round(pos.y) };
+        const speaking = !!bubble && bubble.kind !== 'thought';
+        const style: CSSProperties = { left: `${pos.x}%`, top: `${pos.y}%`, zIndex: (speaking ? 1000 : 100) + Math.round(pos.y) };
         return (
           <button
             key={`c-${p.id}`}
@@ -191,10 +192,15 @@ export function TownRing(props: Props) {
             disabled={!target}
             title={p.realName ?? p.name}
           >
-            {bubble && !hidden && (
+            {/* Thoughts are only a marker (hover to read); the full text of the current speaker is on the stage. */}
+            {bubble && !hidden && bubble.kind === 'thought' && (
+              <span className="think-mark" title={bubble.text}>
+                💭
+              </span>
+            )}
+            {bubble && !hidden && bubble.kind !== 'thought' && (
               <span className={`bubble ${bubble.kind} ${bubble.forgedBy && props.godView ? 'forged' : ''}`}>
-                {bubble.kind === 'thought' && '💭 '}
-                {bubble.text.length > 140 ? `${bubble.text.slice(0, 140)}…` : bubble.text}
+                {bubble.text.length > 90 ? `${bubble.text.slice(0, 90)}…` : bubble.text}
                 {bubble.forgedBy && props.godView && <span className="forged-by">🗣 really {nameOf(bubble.forgedBy)}</span>}
               </span>
             )}
@@ -206,7 +212,7 @@ export function TownRing(props: Props) {
             )}
             <span className="figure">
               {alive ? (
-                <Character look={look} scale={charScale} className={bubble ? 'talk' : night ? '' : 'bob'} style={{ animationDelay: `${(i % 5) * 0.2}s` }} />
+                <Character look={look} scale={charScale} className={bubble && bubble.kind !== 'thought' ? 'talk' : night ? '' : 'bob'} style={{ animationDelay: `${(i % 5) * 0.2}s` }} />
               ) : (
                 <Grave scale={charScale * 0.8} />
               )}
