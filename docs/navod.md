@@ -209,6 +209,9 @@ zkopíruje jen tvoje přihlášení. Tvoje pluginy (Browser Use, prohlížeč, `
 tak do hry nezasahují. Když se přihlášení obnoví, runner ho zkopíruje zpátky do `~/.codex`.
 Nástroje hry má Codex povolené bez ptaní (`default_tools_approval_mode = "approve"` jen pro server palermo).
 
+**Bez Opusu:** `play-mix5.bat` (sestava `examples\mix5.json`) = stejná hra bez Opusu, 5 hráčů.
+Statistiky ji vedou zvlášť (jiná sestava, režim `mix5`).
+
 **Opus 5.5 a bezpečnostní filtr:** Opus 5.5 občas odmítne hru jako „safeguards flagged this message“
 (planý poplach kvůli slovům jako vrah/zabít). Skill hru popisuje jako společenskou hru (Mafia/Werewolf);
 když filtr přesto zasáhne, runner začne novou konverzaci místo té zablokované. Po 3 odmítnutích to vzdá

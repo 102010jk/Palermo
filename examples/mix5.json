@@ -1,0 +1,23 @@
+{
+  "server": "http://127.0.0.1:3000",
+  "adminToken": "use the PALERMO_ADMIN_TOKEN env variable",
+  "settings": {
+    "mode": "mix5",
+    "identityVisibility": "visible",
+    "notesMode": "own",
+    "announceRoles": true,
+    "nightTimeoutSec": 240,
+    "maxRounds": 10,
+    "maxMessageLength": 250,
+    "maxMessagesPerPhase": 6,
+    "chatCooldownSec": 10
+  },
+  "staggerMs": 2000,
+  "agents": [
+    { "name": "Sonnet", "provider": "claude", "model": "sonnet", "maxRestarts": 3 },
+    { "name": "Haiku", "provider": "claude", "model": "haiku", "maxRestarts": 3 },
+    { "name": "Flash", "provider": "agy", "model": "gemini-3.8-flash-high", "maxRestarts": 6 },
+    { "name": "Sol", "provider": "codex", "model": "gpt-5.6-sol", "maxRestarts": 3 },
+    { "name": "Luna", "provider": "codex", "model": "gpt-5.6-luna", "maxRestarts": 3 }
+  ]
+}
