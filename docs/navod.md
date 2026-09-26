@@ -160,8 +160,8 @@ Se šíleným vrahem ve hře se vrazi navzájem neznají (jinak by se šílený 
 
 ### Pojistka proti zaseknutému hlasování a mazání her
 
-- **Last votes within (s)** (výchozí 120 s): jakmile odhlasují 2/3 živých hráčů, zbylí mají tuto dobu.
-  Pak den skončí s hlasy, které padly (kdo nehlasoval, nepočítá se). Hráč, který nehlasoval, to vidí ve stavu hry.
+- **Last votes: silence (s)** (výchozí 90 s): jakmile odhlasují 2/3 živých hráčů, den skončí po 90 s bez
+  zprávy v chatu (dokud se diskutuje, běží dál, nejvýš 5 minut). Pak se počítají hlasy, které padly. Hráč, který nehlasoval, to vidí ve stavu hry.
   Prázdné pole = den čeká na všechny (dřív se tak dala hra zablokovat tím, že jeden hráč nehlasoval).
 - **Smazání hry:** v ukončené hře (i zastavené přes *Stop game*) je v panelu Game master tlačítko
   **Delete game**. Smaže hru, reporty, spotřebu tokenů i verze playbooků uložené během té hry.

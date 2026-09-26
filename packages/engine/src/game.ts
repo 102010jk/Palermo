@@ -29,6 +29,8 @@ export const TOWN_NAMES = [
 export const SKIP = 'skip';
 /** Night target meaning "stay home tonight" (murderers may pass). */
 export const PASS = 'pass';
+/** The vote deadline never stretches beyond this, however much people keep talking. */
+export const VOTE_DEADLINE_CAP_SEC = 300;
 
 export interface GameOptions {
   seed?: number;
@@ -325,6 +327,7 @@ export class Game {
     const d = this.now() - s.pausedAt;
     if (s.phaseEndsAt) s.phaseEndsAt += d;
     if (s.voteDeadlineAt) s.voteDeadlineAt += d;
+    if (s.voteDeadlineStartedAt) s.voteDeadlineStartedAt += d;
     s.pausedAt = null;
     s.pauseReason = null;
     return [this.emit('notice', { scope: 'public' }, 'The game continues.', { kind: 'resumed' })];
@@ -341,6 +344,7 @@ export class Game {
     s.messagesThisPhase = {};
     s.votes = {};
     s.voteDeadlineAt = null;
+    s.voteDeadlineStartedAt = null;
     const timeout = phase === 'night' ? this.settings.nightTimeoutSec : phase === 'day' ? this.settings.dayTimeoutSec : null;
     s.phaseEndsAt = timeout ? s.phaseStartedAt + timeout * 1000 : null;
 
@@ -414,6 +418,7 @@ export class Game {
     const out = this.emitThought(p, thought, 'chat');
     if (s.phase === 'day') {
       out.push(this.emit('chat', { scope: 'public' }, `${p.publicName}: ${text}`, { message: text }, p.id));
+      this.extendVoteDeadline();
       return out;
     }
     // night: murderers' private chat
@@ -809,13 +814,13 @@ export class Game {
     return out;
   }
 
-  /** Stall guard: two thirds have voted, the others get settings.voteDeadlineSec to vote. */
+  /** Stall guard: two thirds have voted, the rest have until the chat has been quiet for settings.voteDeadlineSec. */
   private maybeStartVoteDeadline(voted: number, alive: number): GameEvent[] {
     const s = this.state;
     const sec = this.settings.voteDeadlineSec;
-    if (!sec || s.voteDeadlineAt || voted * 3 < alive * 2) return [];
-    s.voteDeadlineAt = this.now() + sec * 1000;
-    if (!s.phaseEndsAt || s.voteDeadlineAt < s.phaseEndsAt) s.phaseEndsAt = s.voteDeadlineAt;
+    if (!sec || s.voteDeadlineStartedAt || voted * 3 < alive * 2) return [];
+    s.voteDeadlineStartedAt = this.now();
+    this.extendVoteDeadline();
     const missing = this.alive()
       .filter((p) => !(p.id in s.votes))
       .map((p) => p.publicName);
@@ -823,10 +828,22 @@ export class Game {
       this.emit(
         'notice',
         { scope: 'public' },
-        `${voted}/${alive} have voted. ${missing.join(', ')}: vote within ${sec} s, otherwise the day ends with the votes cast so far.`,
+        `${voted}/${alive} have voted. ${missing.join(', ')}: vote soon. The day ends ${sec} s after the last chat message ` +
+          `(at most ${Math.max(sec, VOTE_DEADLINE_CAP_SEC) / 60} min from now) with the votes cast so far.`,
         { deadline: s.voteDeadlineAt, missing },
       ),
     ];
+  }
+
+  /** Moves the vote deadline to `voteDeadlineSec` after now, within the cap and the day's own time limit. */
+  private extendVoteDeadline(): void {
+    const s = this.state;
+    const sec = this.settings.voteDeadlineSec;
+    if (!sec || !s.voteDeadlineStartedAt || s.phase !== 'day') return;
+    const cap = s.voteDeadlineStartedAt + Math.max(sec, VOTE_DEADLINE_CAP_SEC) * 1000;
+    const dayEnd = this.settings.dayTimeoutSec && s.phaseStartedAt ? s.phaseStartedAt + this.settings.dayTimeoutSec * 1000 : Infinity;
+    s.voteDeadlineAt = Math.min(this.now() + sec * 1000, cap, dayEnd);
+    s.phaseEndsAt = s.voteDeadlineAt;
   }
 
   tally(): { counts: Record<string, number>; eliminated: string | null; tie: boolean } {

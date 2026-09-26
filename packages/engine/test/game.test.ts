@@ -217,7 +217,7 @@ describe('day', () => {
     expect(g.alive()).toHaveLength(5);
   });
 
-  it('stall guard: after two thirds voted, the rest get voteDeadlineSec, then the day resolves', () => {
+  it('stall guard: after two thirds voted, the day ends after 90 s of chat silence (at most 5 min)', () => {
     const { g, m, d, t, cs, advance } = toDay();
     // 5 alive: the deadline starts at the 4th vote (4 * 3 >= 5 * 2), not at the 3rd.
     g.vote(d.id, m.id);
@@ -225,14 +225,29 @@ describe('day', () => {
     g.vote(cs[1].id, m.id);
     expect(g.state.phaseEndsAt).toBeNull();
     const events = g.vote(cs[2].id, m.id);
-    expect(events.some((e) => e.text.includes(`${g.player(m.id)!.publicName}: vote within 120 s`))).toBe(true);
-    advance(119_000);
-    expect(g.tick()).toEqual([]);
-    advance(2_000);
+    expect(events.some((e) => e.text.includes(`${g.player(m.id)!.publicName}: vote soon`))).toBe(true);
+    // Talking keeps the day open…
+    for (let i = 0; i < 3; i++) {
+      advance(80_000);
+      expect(g.tick()).toEqual([]);
+      g.say(m.id, 'wait, listen to me');
+    }
+    // …but not beyond 5 minutes after the deadline started.
+    advance(61_000);
     g.tick();
     // The murderer never voted, but 4 votes against them still count.
     expect(g.state.phase).toBe('ended');
     expect(g.state.winner).toBe('town');
+  });
+
+  it('stall guard: 90 s of silence ends the day', () => {
+    const { g, m, d, t, cs, advance } = toDay();
+    for (const p of [d, t, cs[1], cs[2]]) g.vote(p.id, m.id);
+    advance(89_000);
+    expect(g.tick()).toEqual([]);
+    advance(2_000);
+    g.tick();
+    expect(g.state.phase).toBe('ended');
   });
 
   it('no stall guard when voteDeadlineSec is off', () => {

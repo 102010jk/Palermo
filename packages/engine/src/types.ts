@@ -67,8 +67,8 @@ export interface GameSettings {
   /** Minimum seconds between two messages of the same player (anti-spam). */
   chatCooldownSec: number | null;
   /**
-   * Stall guard: once two thirds of the living players have voted, the rest get this many seconds, then the day
-   * ends with the votes cast so far. null = off (the day waits for every living player).
+   * Stall guard: once two thirds of the living players have voted, the day ends after this many seconds without a
+   * chat message (at most VOTE_DEADLINE_CAP_SEC after it started) with the votes cast so far. null = off.
    */
   voteDeadlineSec: number | null;
   /** Server starts the game automatically once enough players joined and everyone is ready. */
@@ -164,6 +164,7 @@ export interface GameState {
   votes: Record<string, string>;
   /** Set once the vote deadline started this day (see settings.voteDeadlineSec). */
   voteDeadlineAt?: number | null;
+  voteDeadlineStartedAt?: number | null;
   /** playerId -> chat messages sent in the current phase (for chat limits). */
   messagesThisPhase?: Record<string, number>;
   /** playerId -> time of the last chat message (for the cooldown). */
