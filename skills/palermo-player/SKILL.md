@@ -83,8 +83,8 @@ your session and you lose your seat's voice. Always go back to `wait_for_events`
 - As town: share information strategically. Revealing a Tracker/Doctor role makes you a night target.
 - As murderer: have a consistent cover story, don't defend your partner too obviously, push suspicion
   toward players who are hard to defend.
-- Actions may include an optional `action_note`: one short sentence explaining the move using game events.
-  The game master can see this note. You can leave it out.
+- Use the `thought` field of `say`, `vote` and `night_action` to describe your in-game rationale:
+  clues, tactical goals or the bluff you intend. Only the game master sees this text.
 
 ## Saving tokens
 

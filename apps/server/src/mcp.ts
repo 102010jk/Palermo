@@ -15,7 +15,7 @@ Protocol:
 2. join_game, then set_ready.
 3. Loop: wait_for_events -> react (say / vote / night_action) -> wait_for_events ... until the game is over.
 4. When the game is over: submit_report, then save_notes, then stop.
-Your only goal is to WIN for your team. Actions may include an optional brief action_note for the game master.`;
+Your only goal is to WIN for your team. Actions accept a private "thought" field for your in-game rationale; only the game master sees it.`;
 
 type Ctx = { manager: GameManager; db: Db; auth: Auth };
 
@@ -221,17 +221,17 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
     }),
   );
 
-  const action_note = z.string().max(300).optional().describe('Optional one-sentence explanation of this move based on game events. The game master can see it.');
+  const thought = z.string().max(2000).optional().describe('Your in-game rationale for this action. Only the game master sees it.');
 
   registerTool(
     'say',
     {
       description: 'Send a chat message. Day: everyone reads it. Night: only your mafia partners (mafia only).',
-      inputSchema: { message: z.string().min(1).max(2000), action_note },
+      inputSchema: { message: z.string().min(1).max(2000), thought },
     },
-    guard(async (args: { message: string; action_note?: string }) => {
+    guard(async (args: { message: string; thought?: string }) => {
       const { game, playerId } = seat();
-      const events = manager.apply(game.state.id, (g) => g.say(playerId, args.message, args.action_note));
+      const events = manager.apply(game.state.id, (g) => g.say(playerId, args.message, args.thought));
       if (events.some((e) => e.data.kind === 'speech_queued')) {
         return text('Others are speaking: your message is in line and will be heard shortly. Call wait_for_events.');
       }
@@ -245,12 +245,12 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
       description:
         'Day only: vote to eliminate a player (by name), "skip" for no elimination, or "none" to withdraw. ' +
         'You may change your vote. The day ends when every living player has voted.',
-      inputSchema: { target: z.string().min(1).max(40), action_note },
+      inputSchema: { target: z.string().min(1).max(40), thought },
     },
-    guard(async (args: { target: string; action_note?: string }) => {
+    guard(async (args: { target: string; thought?: string }) => {
       const { game, playerId } = seat();
       const t = args.target.trim().toLowerCase() === 'none' ? null : args.target;
-      manager.apply(game.state.id, (g) => g.vote(playerId, t, args.action_note));
+      manager.apply(game.state.id, (g) => g.vote(playerId, t, args.thought));
       const g = manager.get(game.state.id)!;
       return text(`Vote recorded.\n\n${formatStatus(g, playerId)}`);
     }),
@@ -262,11 +262,11 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
       description:
         'Night only: use your role ability on a player (murderer: kill, or target "pass" to stay home; doctor: protect; ' +
         'tracker: follow; trapper: trap their house).',
-      inputSchema: { target: z.string().min(1).max(40), action_note },
+      inputSchema: { target: z.string().min(1).max(40), thought },
     },
-    guard(async (args: { target: string; action_note?: string }) => {
+    guard(async (args: { target: string; thought?: string }) => {
       const { game, playerId } = seat();
-      manager.apply(game.state.id, (g) => g.nightAction(playerId, args.target, args.action_note));
+      manager.apply(game.state.id, (g) => g.nightAction(playerId, args.target, args.thought));
       return text('Night action recorded. You may change it until the night ends. Call wait_for_events.');
     }),
   );
@@ -277,12 +277,12 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
       description:
         'Only if your role message says you have a gun: during the day, fire your single bullet at a player. ' +
         'They die at once and everyone learns you are the Gunman.',
-      inputSchema: { target: z.string().min(1).max(40), action_note },
+      inputSchema: { target: z.string().min(1).max(40), thought },
       annotations: { destructiveHint: false },
     },
-    guard(async (args: { target: string; action_note?: string }) => {
+    guard(async (args: { target: string; thought?: string }) => {
       const { game, playerId } = seat();
-      manager.apply(game.state.id, (g) => g.shoot(playerId, args.target, args.action_note));
+      manager.apply(game.state.id, (g) => g.shoot(playerId, args.target, args.thought));
       return text(formatStatus(manager.get(game.state.id)!, playerId));
     }),
   );
@@ -304,12 +304,12 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
         a: z.string().min(1).max(40).optional(),
         b: z.string().min(1).max(40).optional(),
         message: z.string().min(1).max(2000).optional(),
-        action_note,
+        thought,
       },
     },
-    guard(async (args: { mode: string; letters?: { to: string; message: string }[]; a?: string; b?: string; message?: string; action_note?: string }) => {
+    guard(async (args: { mode: string; letters?: { to: string; message: string }[]; a?: string; b?: string; message?: string; thought?: string }) => {
       const { game, playerId } = seat();
-      manager.apply(game.state.id, (g) => g.mailBird(playerId, args, args.action_note));
+      manager.apply(game.state.id, (g) => g.mailBird(playerId, args, args.thought));
       return text('Mail recorded; it goes out at dawn. Call wait_for_events.');
     }),
   );
@@ -319,11 +319,11 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
     {
       description:
         'Day only, if a mail bird linked you with a player today: send them one private message (only the two of you read it).',
-      inputSchema: { to: z.string().min(1).max(40), message: z.string().min(1).max(2000), action_note },
+      inputSchema: { to: z.string().min(1).max(40), message: z.string().min(1).max(2000), thought },
     },
-    guard(async (args: { to: string; message: string; action_note?: string }) => {
+    guard(async (args: { to: string; message: string; thought?: string }) => {
       const { game, playerId } = seat();
-      manager.apply(game.state.id, (g) => g.birdMessage(playerId, args.to, args.message, args.action_note));
+      manager.apply(game.state.id, (g) => g.birdMessage(playerId, args.to, args.message, args.thought));
       return text(`Delivered privately to ${args.to}. Call wait_for_events.`);
     }),
   );
@@ -333,11 +333,11 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
     {
       description:
         'Only right after you died (until the end of the next phase): leave one public farewell message. Optional, once.',
-      inputSchema: { message: z.string().min(1).max(2000), action_note },
+      inputSchema: { message: z.string().min(1).max(2000), thought },
     },
-    guard(async (args: { message: string; action_note?: string }) => {
+    guard(async (args: { message: string; thought?: string }) => {
       const { game, playerId } = seat();
-      manager.apply(game.state.id, (g) => g.lastWords(playerId, args.message, args.action_note));
+      manager.apply(game.state.id, (g) => g.lastWords(playerId, args.message, args.thought));
       return text('Everyone heard your last words. Call wait_for_events (you will be woken when the game ends).');
     }),
   );
@@ -349,11 +349,11 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
         'Only if your role message gives you this ability, once per day: post a public chat message that appears to come from another living player ' +
         '(`as` = their name). Nobody can tell it is forged, but that player also reads it and may deny it. ' +
         'It counts against your own chat limits.',
-      inputSchema: { as: z.string().min(1).max(40), message: z.string().min(1).max(2000), action_note },
+      inputSchema: { as: z.string().min(1).max(40), message: z.string().min(1).max(2000), thought },
     },
-    guard(async (args: { as: string; message: string; action_note?: string }) => {
+    guard(async (args: { as: string; message: string; thought?: string }) => {
       const { game, playerId } = seat();
-      const events = manager.apply(game.state.id, (g) => g.throwVoice(playerId, args.as, args.message, args.action_note));
+      const events = manager.apply(game.state.id, (g) => g.throwVoice(playerId, args.as, args.message, args.thought));
       if (events.some((e) => e.data.kind === 'speech_queued')) {
         return text(`Others are speaking: your forged message is in line and will be heard as ${args.as} shortly. Call wait_for_events.`);
       }

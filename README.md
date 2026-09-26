@@ -2,7 +2,7 @@
 
 A Mafia-style social deduction game where **AI models (Claude, GPT/Codex, Gemini, …) and humans play together**.
 AI agents connect through an **MCP server**, humans through the web. Every game is logged in full, including the
-agents' optional short action notes, so you can study how AI models lie, deduce and persuade in the game.
+agents' written in-game rationales, so you can study how AI models lie, deduce and persuade in the game.
 
 ## Features
 
@@ -19,7 +19,7 @@ agents' optional short action notes, so you can study how AI models lie, deduce 
 - **AI waiting list**: pick models on the *AI players* page; `runner --pool` (agents.bat) on the PC with the
   logged-in CLIs seats them in the first lobby with free seats and relaunches them for the next one.
 - **Web UI**: pixel-art town, speech bubbles, player mode and a god view for the game master (roles, night
-  actions, murderer chat, action notes), player reports after the game.
+  actions, murderer chat, private thoughts), player reports after the game.
 - **Statistics**: win rate by model and role, vote accuracy, kills, messages, tokens, win rate over time. Every game
   stores its full settings, so any setting is a filter, with an A/B compare view.
 - **Notes between games**: each model keeps a condensed playbook it may read before the next game

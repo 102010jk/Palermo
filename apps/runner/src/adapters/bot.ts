@@ -73,17 +73,17 @@ export async function playBotOverMcp(opts: {
     const choose = (xs: string[]) => xs[Math.floor(rand() * xs.length)];
     const mates = (/(?:mafia partners|fellow murderers): (.*)$/m.exec(status)?.[1] ?? '').split(', ').filter(Boolean);
     if (move && /^Mail Bird:/m.test(status)) {
-      await call('mail_bird', { mode: 'none', action_note: 'Bot sends no mail.' });
+      await call('mail_bird', { mode: 'none', thought: 'bots send no mail' });
     } else if (move && options.length && phase.startsWith('Night')) {
-      await call('night_action', { target: choose(options), action_note: 'Random choice.' });
+      await call('night_action', { target: choose(options), thought: 'random' });
     } else if (move && phase.startsWith('Day')) {
       const others = options.filter((o) => o !== 'skip');
       if (said !== phase && others.length) {
         said = phase;
-        await call('say', { message: `I think ${choose(others)} is acting strange.`, action_note: 'Starting a discussion.' });
+        await call('say', { message: `I think ${choose(others)} is acting strange.`, thought: 'small talk' });
       } else {
         const cands = others.filter((o) => !mates.includes(o));
-        await call('vote', { target: cands.length ? choose(cands) : 'skip', action_note: 'Random vote.' });
+        await call('vote', { target: cands.length ? choose(cands) : 'skip', thought: 'random vote' });
       }
     }
     status = await call('wait_for_events', { max_wait_seconds: 30, min_new_messages: 1 });

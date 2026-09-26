@@ -885,7 +885,7 @@ function EventLine({ e, players, admin, forgedBy }: { e: GameEvent; players: Pub
     case 'thought':
       return (
         <div className="ev thought">
-          <span className="pill">action note</span> <b style={{ color }}>{actor?.name}</b> <i>{String(e.data.thought ?? '')}</i>
+          <span className="pill">thinks</span> <b style={{ color }}>{actor?.name}</b> <i>{String(e.data.thought ?? '')}</i>
         </div>
       );
     case 'phase_changed':
