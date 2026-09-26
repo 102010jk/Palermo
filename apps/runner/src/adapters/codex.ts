@@ -98,6 +98,7 @@ export const codexAdapter: Adapter = {
     const started = Date.now();
     const code = await runProcess(ctx.spec.command ?? 'codex', args, {
       cwd: ctx.workdir,
+      signal: ctx.signal,
       env: home ? { CODEX_HOME: home } : {},
       onErr: (l) => {
         if (/WARNING: proceeding|Reading additional input/.test(l)) return;

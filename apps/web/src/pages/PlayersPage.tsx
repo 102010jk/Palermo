@@ -19,6 +19,7 @@ interface Pick extends CatalogEntry {
   gameId?: string;
   error?: string;
   games: number;
+  since: number;
 }
 
 interface PoolStatus {
@@ -150,7 +151,10 @@ export function PlayersPage() {
                     <div className="muted small">{p.label}</div>
                   </td>
                   <td>
-                    <span className={`badge ${p.status === 'error' ? 'warn' : ''}`}>{STATUS[p.status]}</span>
+                    <span className={`badge ${p.status === 'error' ? 'warn' : ''}`}>
+                      {STATUS[p.status]}
+                      {p.status === 'joining' && ` · ${Math.max(0, Math.round((Date.now() - p.since) / 1000))} s`}
+                    </span>
                     {p.gameId && (
                       <>
                         {' '}
@@ -158,6 +162,9 @@ export function PlayersPage() {
                       </>
                     )}
                     {p.games > 0 && <div className="muted small">{p.games} games played</div>}
+                    {p.status === 'joining' && Date.now() - p.since > 45_000 && (
+                      <div className="muted small">Starting the CLI can take a minute or two (see agents.bat).</div>
+                    )}
                     {p.error && <div className="error small">{p.error}</div>}
                   </td>
                   <td>
@@ -174,7 +181,13 @@ export function PlayersPage() {
                     )}
                     <button
                       className="small ghost"
-                      title={p.status === 'playing' ? 'Removes it from the list; the running game continues' : 'Remove'}
+                      title={
+                        p.status === 'playing'
+                          ? 'Removes it from the list and stops its CLI (it leaves the game)'
+                          : p.status === 'joining'
+                            ? 'Removes it and stops its CLI; the seat frees up'
+                            : 'Remove'
+                      }
                       onClick={() => call('DELETE', `/api/admin/pool/picks/${p.id}`)}
                     >
                       ✕

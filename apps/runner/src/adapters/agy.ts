@@ -165,6 +165,7 @@ async function runOnce(ctx: AgentContext, launch: Launch, cmd: string, modelArgs
   const started = Date.now();
   const code = await runProcess(cmd, args, {
     cwd: ctx.workdir,
+    signal: ctx.signal,
     env: { AGY_CLI_HIDE_LOGO: '1' },
     onKill: (k) => (kill = k),
     onErr: (l) => {

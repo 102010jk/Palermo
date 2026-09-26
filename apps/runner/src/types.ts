@@ -38,6 +38,8 @@ export interface AgentContext {
   skill: string;
   api: Api;
   log: (line: string) => void;
+  /** Aborted when the agent must stop (removed from the AI waiting list, or the game started without it). */
+  signal?: AbortSignal;
   /** Report the exact model the CLI resolved (e.g. "sonnet" -> "claude-sonnet-5") so stats are precise. */
   reportModel: (model: string) => void;
 }

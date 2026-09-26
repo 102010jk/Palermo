@@ -105,6 +105,7 @@ export const claudeAdapter: Adapter = {
     let blocked: string | undefined;
     const code = await runProcess(ctx.spec.command ?? 'claude', args, {
       cwd: ctx.workdir,
+      signal: ctx.signal,
       env: { MCP_TOOL_TIMEOUT: '300000', MCP_TIMEOUT: '60000', ...PARENT_SESSION_ENV },
       onErr: (l) => ctx.log(`stderr: ${short(l)}`),
       onLine: (line) => {
@@ -119,6 +120,10 @@ export const claudeAdapter: Adapter = {
             ctx.log(`MCP details: ${short(JSON.stringify(srv ?? {}), 300)}`);
             fatal = `Claude Code could not connect to the palermo MCP server at ${ctx.mcpUrl}`;
           }
+        } else if (m.type === 'system' && m.subtype !== 'init') {
+          // e.g. API retries while Anthropic is overloaded: explains a slow start.
+          const { type: _t, session_id: _s, uuid: _u, ...rest } = m;
+          ctx.log(`⏳ ${short(JSON.stringify(rest), 200)}`);
         } else if (m.type === 'assistant') {
           for (const c of m.message?.content ?? []) {
             if (c.type === 'text' && c.text?.trim()) {

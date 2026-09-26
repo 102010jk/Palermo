@@ -22,6 +22,7 @@ export async function playBotOverMcp(opts: {
   maxSteps?: number;
   /** Connect through the stdio bridge, exactly like Claude Code does. */
   viaBridge?: boolean;
+  signal?: AbortSignal;
 }): Promise<{ finished: boolean; steps: number }> {
   const log = opts.log ?? (() => {});
   const rand = opts.rand ?? Math.random;
@@ -56,6 +57,10 @@ export async function playBotOverMcp(opts: {
   const maxSteps = opts.maxSteps ?? 2000;
   let status = await call('get_state');
   while (steps++ < maxSteps) {
+    if (opts.signal?.aborted) {
+      await client.close();
+      return { finished: false, steps };
+    }
     if (/GAME OVER/.test(status)) {
       await call('submit_report', { summary: `${opts.name} (scripted bot) played randomly.`, lessons: 'Bots do not learn.' });
       await call('save_notes', { content: 'Scripted bot: no notes.' });
@@ -94,6 +99,7 @@ export const botAdapter: Adapter = {
       name: ctx.spec.name,
       log: ctx.log,
       viaBridge: ctx.spec.mcpTransport === 'bridge',
+      signal: ctx.signal,
     });
     ctx.log(`bot finished=${r.finished} after ${r.steps} steps`);
     return { exitCode: r.finished ? 0 : 1 };

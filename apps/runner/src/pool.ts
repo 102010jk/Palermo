@@ -36,11 +36,11 @@ function readModels(path: string): CatalogEntry[] {
   }
 }
 
-/** "gemini-3.8-flash-high     Gemini 3.8 Flash (High)" lines of `agy models`. */
+/** "gemini-3.8-flash-high     Gemini 3.8 Flash (High)" lines of `agy models` (a tab or 2+ spaces between). */
 export function parseAgyModels(out: string): CatalogEntry[] {
   return out
     .split(/\r?\n/)
-    .map((l) => /^\s*([a-z0-9][\w.-]+)\s{2,}(.+?)\s*$/i.exec(l))
+    .map((l) => /^\s*([a-z0-9][\w.-]+)(?:\t[\t ]*| {2,})(.+?)\s*$/i.exec(l))
     // Model slugs are lower-case with a dash ("gemini-3.8-flash-high"); skips headers such as "SLUG  NAME".
     .filter((m): m is RegExpExecArray => !!m && /^[a-z0-9][a-z0-9._]*-[a-z0-9._-]+$/.test(m[1]))
     .map((m) => ({ provider: 'agy' as const, model: m[1], label: m[2] }));
@@ -84,7 +84,8 @@ export async function runPool(cfg: RunnerConfig, api: Api, skill: string, root: 
   console.log(`\nPick players on ${cfg.server.replace(/\/$/, '')}/players – they join the first lobby with free seats.`);
   console.log('Keep this window open. Ctrl+C stops the launcher (running agents stop too).\n');
 
-  const running = new Map<string, Promise<void>>();
+  const running = new Map<string, AbortController>();
+  const names = new Map<string, string>();
   let n = 0;
   let offline = false;
   let lastSummary = '';
@@ -96,8 +97,18 @@ export async function runPool(cfg: RunnerConfig, api: Api, skill: string, root: 
       const summary = describePool(r, cfg.server);
       if (summary !== lastSummary) console.log(`\x1b[90m${new Date().toTimeString().slice(0, 8)}\x1b[0m ${summary}`);
       lastSummary = summary;
+      for (const id of (r.cancel ?? []) as string[]) {
+        const c = running.get(id);
+        if (c && !c.signal.aborted) {
+          console.log(`■ stopping ${names.get(id) ?? id}: its seat is gone (removed from the waiting list, or the game started without it)`);
+          c.abort();
+        }
+      }
       for (const a of (r.assignments ?? []) as Assignment[]) {
-        running.set(a.pickId, play(a, n++).finally(() => running.delete(a.pickId)));
+        const c = new AbortController();
+        running.set(a.pickId, c);
+        names.set(a.pickId, a.name);
+        play(a, n++, c.signal).finally(() => running.delete(a.pickId));
       }
     } catch (e) {
       if (!offline) console.log(`Server ${cfg.server} not reachable (${(e as Error).message}); retrying…`);
@@ -106,7 +117,7 @@ export async function runPool(cfg: RunnerConfig, api: Api, skill: string, root: 
     await new Promise((res) => setTimeout(res, POLL_MS));
   }
 
-  async function play(a: Assignment, i: number): Promise<void> {
+  async function play(a: Assignment, i: number, signal: AbortSignal): Promise<void> {
     console.log(`→ ${a.name} (${a.provider} ${a.model}) joins ${a.gameId}`);
     const game = await api.game(a.gameId).catch(() => null);
     const spec: AgentSpec = { name: a.name, provider: a.provider, model: a.model, maxRestarts: a.provider === 'agy' ? 6 : 3 };
@@ -125,12 +136,14 @@ export async function runPool(cfg: RunnerConfig, api: Api, skill: string, root: 
         runDir,
         freedomMode: game?.view?.settings?.freedomMode === true,
         color: COLORS[i % COLORS.length],
+        signal,
       });
     } catch (e) {
       error = (e as Error).message;
     }
-    console.log(error ? `✗ ${a.name}: ${error}` : `✓ ${a.name} finished ${a.gameId}`);
-    await api.req('POST', '/api/admin/pool/finish', { pickId: a.pickId, error }).catch(() => {});
+    if (signal.aborted) console.log(`■ ${a.name} stopped`);
+    else console.log(error ? `✗ ${a.name}: ${error}` : `✓ ${a.name} finished ${a.gameId}`);
+    await api.req('POST', '/api/admin/pool/finish', { pickId: a.pickId, gameId: a.gameId, error: signal.aborted ? undefined : error }).catch(() => {});
   }
 }
 

@@ -54,6 +54,7 @@ async function runAgent(ctx: AgentContext, adapter: Adapter): Promise<string | u
   let resumeId: string | undefined;
   let blockedRuns = 0;
   for (let attempt = 0; attempt <= maxRestarts; attempt++) {
+    if (ctx.signal?.aborted) break;
     let prompt = startPrompt(ctx);
     if (attempt > 0) {
       const state = await ctx.api.game(ctx.gameId, ctx.token).catch(() => null);
@@ -108,6 +109,7 @@ export interface LaunchOptions {
   runDir: string;
   freedomMode: boolean;
   color: number;
+  signal?: AbortSignal;
 }
 
 /** Plays one agent through one game (with relaunches). Returns a fatal error message if it could not play. */
@@ -125,6 +127,7 @@ export async function launchAgent(o: LaunchOptions): Promise<string | undefined>
     workdir,
     freedomMode: o.freedomMode,
     skill: o.skill,
+    signal: o.signal,
     api,
     reportModel: (model) => {
       if (model === spec.model) return;

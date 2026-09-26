@@ -156,4 +156,26 @@ describe('server', () => {
     await api('POST', `/api/games/${closed}/abort`, {});
     await api('POST', `/api/games/${open}/abort`, {});
   });
+
+  it('puts an AI player back on the waiting list and cancels its CLI when the game starts without it', async () => {
+    for (const g of (await api('GET', '/api/games')).body) if (g.phase === 'lobby') await api('POST', `/api/games/${g.id}/abort`, {});
+    const game = (await api('POST', '/api/games', { settings: { mode: 'pool-late', seats: 3 } })).body.id;
+    await api('POST', '/api/admin/pool/picks', { provider: 'bot', model: 'script', label: 'Late bot', repeat: true });
+    const late = (await api('POST', '/api/admin/pool/hello', { host: 'test' })).body.assignments.find((a: { gameId: string }) => a.gameId === game);
+    expect(late).toBeTruthy();
+    // Humans/bots fill the table and the host starts before the agent sat down.
+    await api('POST', `/api/games/${game}/bots`, { count: 3 });
+    await api('POST', `/api/games/${game}/start`, { force: true });
+    const r = (await api('POST', '/api/admin/pool/hello', { host: 'test', running: [late.pickId] })).body;
+    expect(r.cancel).toEqual([late.pickId]);
+    expect(r.assignments.some((a: { pickId: string }) => a.pickId === late.pickId)).toBe(false);
+    const pick = (await api('GET', '/api/admin/pool')).body.picks.find((p: { id: string }) => p.id === late.pickId);
+    expect(pick.status).toBe('waiting');
+    // A late "finished" report from the stopped CLI changes nothing.
+    await api('POST', '/api/admin/pool/finish', { pickId: late.pickId, gameId: game, error: 'boom' });
+    expect((await api('GET', '/api/admin/pool')).body.picks.find((p: { id: string }) => p.id === late.pickId).status).toBe('waiting');
+    await api('DELETE', `/api/admin/pool/picks/${late.pickId}`);
+    await api('POST', `/api/games/${game}/abort`, {});
+  });
 });
+

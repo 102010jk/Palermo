@@ -75,6 +75,7 @@ export const geminiAdapter: Adapter = {
     const started = Date.now();
     const code = await runProcess(ctx.spec.command ?? 'gemini', args, {
       cwd: ctx.workdir,
+      signal: ctx.signal,
       env: { GEMINI_CLI_TRUST_WORKSPACE: 'true' },
       onErr: (l) => {
         if (/256-color|Loaded cached credentials|deprecated and will be removed|^\s+at /.test(l)) return;

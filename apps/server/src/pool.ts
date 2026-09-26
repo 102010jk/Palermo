@@ -131,8 +131,23 @@ export class AgentPool {
   }
 
   remove(id: string): void {
-    this.picks = this.picks.filter((p) => p.id !== id);
+    const p = this.picks.find((x) => x.id === id);
+    if (p) this.leaveLobby(p);
+    this.picks = this.picks.filter((x) => x.id !== id);
     this.save();
+  }
+
+  /** Frees the seat of a pick that is still sitting in a lobby (the game has not started yet). */
+  private leaveLobby(p: Pick): void {
+    const game = p.gameId ? this.manager.liveGame(p.gameId) : null;
+    const seat = game?.state.players.find((x) => x.accountId === p.accountId);
+    if (game && seat && game.state.phase === 'lobby') {
+      try {
+        this.manager.apply(game.state.id, (g) => g.removePlayer(seat.id));
+      } catch {
+        // already gone
+      }
+    }
   }
 
   private uniqueName(base: string, selfId?: string): string {
@@ -174,31 +189,41 @@ export class AgentPool {
       const game = p.gameId ? this.manager.get(p.gameId) : null;
       const seated = !!game?.state.players.some((x) => x.accountId === p.accountId);
       if (p.status === 'joining' && seated) p.status = 'playing';
-      const lost = !running.has(p.id) && now - p.since > LAUNCHER_TIMEOUT_MS;
-      const neverCame = p.status === 'joining' && (now - p.since > JOIN_TIMEOUT_MS || !game || game.state.phase !== 'lobby');
-      if (lost || neverCame) this.finish(p.id, neverCame && !lost ? 'did not join in time' : undefined);
+      if (!running.has(p.id) && now - p.since > LAUNCHER_TIMEOUT_MS) {
+        this.finish(p.id, p.gameId); // the launcher no longer runs it (restarted or crashed)
+      } else if (p.status === 'joining' && (!game || game.state.phase !== 'lobby')) {
+        // The game started without it: not its fault, it waits for the next lobby (the launcher stops the CLI).
+        Object.assign(p, { status: 'waiting', gameId: undefined, accountId: undefined, since: now });
+      } else if (p.status === 'joining' && now - p.since > JOIN_TIMEOUT_MS) {
+        this.leaveLobby(p);
+        Object.assign(p, { status: 'error', error: 'did not sit down within 5 minutes (see agents.bat)', gameId: undefined, accountId: undefined, since: now });
+      }
     }
+    // Agents the launcher still runs but that no longer have a seat (removed, or the game started without them).
+    const active = new Set(this.picks.filter((p) => p.status === 'joining' || p.status === 'playing').map((p) => p.id));
+    const cancel = [...running].filter((id) => !active.has(id));
 
     const assignments: Assignment[] = [];
     for (const g of this.openLobbies()) {
       let free = this.freeSeats(g);
       for (const p of this.picks) {
         if (free <= 0) break;
-        if (p.status !== 'waiting') continue;
+        if (p.status !== 'waiting' || running.has(p.id)) continue;
         const { token, account } = this.auth.createAgent({ name: p.name, provider: PROVIDER_NAME[p.provider], model: p.model, verified: true });
         Object.assign(p, { status: 'joining', gameId: g.state.id, accountId: account.id, since: now, error: undefined });
         assignments.push({ pickId: p.id, gameId: g.state.id, token, accountId: account.id, name: p.name, provider: p.provider, model: p.model });
         free--;
       }
     }
-    if (assignments.length) this.save();
     // A readable summary for the launcher window.
     const closed = this.manager
       .liveGames()
       .filter((g) => g.state.phase === 'lobby' && !g.state.aborted && g.settings.aiPool === false)
       .map((g) => g.state.id);
+    this.save();
     return {
       assignments,
+      cancel,
       waiting: this.picks.filter((p) => p.status === 'waiting').map((p) => p.name),
       busy: this.picks.filter((p) => p.status === 'joining' || p.status === 'playing').map((p) => `${p.name} (${p.gameId})`),
       errors: this.picks.filter((p) => p.status === 'error').map((p) => `${p.name}: ${p.error}`),
@@ -207,13 +232,18 @@ export class AgentPool {
     };
   }
 
-  /** The launcher reports that an agent stopped (game over, or it could not play). */
-  finish(pickId: string, error?: string): void {
+  /**
+   * The launcher reports that an agent stopped (game over, or it could not play). `gameId` guards against a late
+   * report for a pick that has already moved on to another game.
+   */
+  finish(pickId: string, gameId?: string, error?: string): void {
     const p = this.picks.find((x) => x.id === pickId);
-    if (!p) return;
+    if (!p || (gameId && p.gameId && p.gameId !== gameId)) return;
+    if (p.status !== 'joining' && p.status !== 'playing') return;
     const game = p.gameId ? this.manager.get(p.gameId) : null;
     const sat = !!game?.state.players.some((x) => x.accountId === p.accountId);
     if (sat && game?.state.phase === 'ended' && !game.state.aborted && !error) p.games++;
+    if (!error) this.leaveLobby(p);
     if (error) Object.assign(p, { status: 'error', error: error.slice(0, 500) });
     else if (p.repeat) p.status = 'waiting';
     else this.picks = this.picks.filter((x) => x.id !== pickId);

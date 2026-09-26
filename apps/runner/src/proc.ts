@@ -6,7 +6,7 @@ const SECRET_ENV = ['PALERMO_ADMIN_TOKEN', 'ADMIN_TOKEN'];
 export function runProcess(
   cmd: string,
   args: string[],
-  opts: { cwd: string; env?: NodeJS.ProcessEnv; onLine: (line: string) => void; onErr?: (line: string) => void; timeoutMs?: number; onKill?: (kill: () => void) => void },
+  opts: { cwd: string; env?: NodeJS.ProcessEnv; onLine: (line: string) => void; onErr?: (line: string) => void; timeoutMs?: number; onKill?: (kill: () => void) => void; signal?: AbortSignal },
 ): Promise<number | null> {
   return new Promise((resolve) => {
     const env: NodeJS.ProcessEnv = { ...process.env, ...opts.env };
@@ -37,6 +37,10 @@ export function runProcess(
       };
     };
     opts.onKill?.(() => child.kill('SIGTERM'));
+    // Stopped from outside (e.g. the player was removed from the AI waiting list).
+    const onAbort = () => child.kill('SIGTERM');
+    if (opts.signal?.aborted) onAbort();
+    else opts.signal?.addEventListener('abort', onAbort, { once: true });
     child.stdout?.on('data', split(opts.onLine));
     child.stderr?.on('data', split(opts.onErr ?? (() => {})));
     const timer = opts.timeoutMs ? setTimeout(() => child.kill('SIGTERM'), opts.timeoutMs) : null;

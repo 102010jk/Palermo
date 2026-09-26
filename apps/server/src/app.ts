@@ -145,7 +145,12 @@ export function createPalermo(cfg: AppConfig): PalermoApp {
   app.post('/api/admin/pool/hello', wrap((req) => (requireAdmin(req), pool.hello(req.body ?? {}))));
   app.post(
     '/api/admin/pool/finish',
-    wrap((req) => (requireAdmin(req), pool.finish(String(req.body?.pickId), req.body?.error ? String(req.body.error) : undefined), { ok: true })),
+    wrap((req) => {
+      requireAdmin(req);
+      const b = req.body ?? {};
+      pool.finish(String(b.pickId), b.gameId ? String(b.gameId) : undefined, b.error ? String(b.error) : undefined);
+      return { ok: true };
+    }),
   );
 
   // ------------------------------------------------------------------ admin: agents

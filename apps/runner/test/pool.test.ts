@@ -8,11 +8,14 @@ describe('parseAgyModels', () => {
       'SLUG                      NAME',
       'gemini-3.8-flash-high     Gemini 3.8 Flash (High)',
       'claude-opus-4-6-thinking  Claude Opus 4.6 (Thinking)',
+      // agy without a terminal separates the columns with a single tab
+      'gemini-3.8-flash-medium\tGemini 3.8 Flash (Medium)',
       'gpt-oss-120b-medium       GPT-OSS 120B (Medium)',
     ].join('\r\n');
     expect(parseAgyModels(out)).toEqual([
       { provider: 'agy', model: 'gemini-3.8-flash-high', label: 'Gemini 3.8 Flash (High)' },
       { provider: 'agy', model: 'claude-opus-4-6-thinking', label: 'Claude Opus 4.6 (Thinking)' },
+      { provider: 'agy', model: 'gemini-3.8-flash-medium', label: 'Gemini 3.8 Flash (Medium)' },
       { provider: 'agy', model: 'gpt-oss-120b-medium', label: 'GPT-OSS 120B (Medium)' },
     ]);
   });
