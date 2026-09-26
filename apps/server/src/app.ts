@@ -3,7 +3,7 @@ import { createServer, type Server as HttpServer } from 'node:http';
 import { dirname, join } from 'node:path';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { Server as IoServer, type Socket } from 'socket.io';
-import { DEFAULT_SETTINGS, GameError, type Game, type GameSettings, type GameState } from '@palermo/engine';
+import { DEFAULT_SETTINGS, GameError, ROLE_ORDER, type Game, type GameSettings, type GameState } from '@palermo/engine';
 import { Auth, tokenFromRequest, type Principal } from './auth.ts';
 import { Db } from './db.ts';
 import { GameManager, type ManagerOptions } from './manager.ts';
@@ -296,6 +296,10 @@ export function createPalermo(cfg: AppConfig): PalermoApp {
     '/api/games/:id/night',
     playerAction((g, pid, b) => manager.apply(g.state.id, (x) => x.nightAction(pid, String(b.target ?? '')))),
   );
+  app.post(
+    '/api/games/:id/shoot',
+    playerAction((g, pid, b) => manager.apply(g.state.id, (x) => x.shoot(pid, String(b.target ?? '')))),
+  );
 
   // admin game controls
   const adminAction = (fn: (id: string, body: Record<string, unknown>) => unknown) =>
@@ -306,6 +310,8 @@ export function createPalermo(cfg: AppConfig): PalermoApp {
   app.post('/api/games/:id/start', adminAction((id, b) => void manager.apply(id, (g) => g.start(b.force === true))));
   app.post('/api/games/:id/advance', adminAction((id) => void manager.apply(id, (g) => g.forceAdvance())));
   app.post('/api/games/:id/abort', adminAction((id) => void manager.apply(id, (g) => g.abort())));
+  app.post('/api/games/:id/pause', adminAction((id, b) => void manager.apply(id, (g) => g.pause(String(b.reason ?? 'paused by the host').slice(0, 200)))));
+  app.post('/api/games/:id/resume', adminAction((id) => void manager.apply(id, (g) => g.resume())));
   app.post('/api/games/:id/bots', adminAction((id, b) => {
     const n = Math.min(20, Math.max(1, Number(b.count ?? 1)));
     const ids: string[] = [];
@@ -464,9 +470,18 @@ export function sanitizeSettings(input: Record<string, unknown>): Partial<GameSe
   if (typeof input.mode === 'string') out.mode = input.mode.slice(0, 40);
   if (input.roles === 'auto') out.roles = 'auto';
   else if (Array.isArray(input.roles)) {
-    const valid = ['murderer', 'doctor', 'tracker', 'civilian'];
-    out.roles = input.roles.filter((r) => valid.includes(String(r))) as GameSettings['roles'];
+    out.roles = input.roles.filter((r) => (ROLE_ORDER as string[]).includes(String(r))) as GameSettings['roles'];
   }
+  if (input.roleCounts === null) out.roleCounts = null;
+  else if (input.roleCounts && typeof input.roleCounts === 'object') {
+    const counts: Record<string, number> = {};
+    for (const [k, v] of Object.entries(input.roleCounts as Record<string, unknown>)) {
+      const n = Math.floor(Number(v));
+      if ((ROLE_ORDER as string[]).includes(k) && k !== 'civilian' && n > 0) counts[k] = Math.min(20, n);
+    }
+    out.roleCounts = Object.keys(counts).length ? (counts as GameSettings['roleCounts']) : null;
+  }
+  if (input.killMode === 'separate' || input.killMode === 'shared') out.killMode = input.killMode;
   if (input.startPhase === 'day' || input.startPhase === 'night') out.startPhase = input.startPhase;
   if (input.identityVisibility === 'visible' || input.identityVisibility === 'anonymous') out.identityVisibility = input.identityVisibility;
   if (['none', 'own', 'shared'].includes(String(input.notesMode))) out.notesMode = input.notesMode as GameSettings['notesMode'];

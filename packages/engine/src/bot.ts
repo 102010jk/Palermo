@@ -24,7 +24,8 @@ export function botDecide(view: PlayerView, saidThisPhase: number, rand: () => n
   const choose = <T>(xs: T[]): T => xs[Math.floor(rand() * xs.length)];
   if (req.kind === 'ready' && !req.done) return { type: 'ready' };
   if (req.kind === 'night_action' && !req.done && req.options?.length) {
-    return { type: 'night_action', target: choose(req.options), thought: 'Scripted bot: random target.' };
+    const real = req.options.filter((o) => o !== 'pass');
+    return { type: 'night_action', target: real.length ? choose(real) : 'pass', thought: 'Scripted bot: random target.' };
   }
   if (req.kind === 'vote' && view.you?.alive) {
     const others = (req.options ?? []).filter((o) => o !== 'skip');

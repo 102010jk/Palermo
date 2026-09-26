@@ -593,6 +593,15 @@ button:focus-visible {
 .roletag.tracker {
   background: #5a3f86;
 }
+.roletag.trapper {
+  background: #7a5a1a;
+}
+.roletag.gunman {
+  background: #4d4d4d;
+}
+.roletag[class*='crazy_'] {
+  background: repeating-linear-gradient(45deg, #5a2d6b, #5a2d6b 4px, #3b1d47 4px, #3b1d47 8px);
+}
 .readytag {
   font-size: 0.7rem;
   background: rgba(0, 0, 0, 0.5);
@@ -818,6 +827,15 @@ button:focus-visible {
 }
 .role-name.civilian {
   color: var(--town);
+}
+.role-name.trapper {
+  color: #e0b45a;
+}
+.role-name.gunman {
+  color: #cfcfcf;
+}
+.timer.paused {
+  background: #7a5a1a;
 }
 .dead-note {
   color: var(--accent-2);

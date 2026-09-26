@@ -1,16 +1,18 @@
-import { DEFAULT_SETTINGS, ROLES, rolesFor, teamOf } from './roles.ts';
-import { shuffle } from './rng.ts';
+import { DEFAULT_SETTINGS, ROLES, apparentRole, isCrazy, rolesFor, teamOf } from './roles.ts';
+import { pick, shuffle } from './rng.ts';
 import type {
   EventType,
   GameEvent,
   GameSettings,
   GameState,
+  NightActionKind,
   Phase,
   Player,
   PlayerInput,
   PlayerView,
   PublicPlayer,
   RequiredAction,
+  RoleId,
   Team,
   Visibility,
   Winner,
@@ -25,6 +27,8 @@ export const TOWN_NAMES = [
 ];
 
 export const SKIP = 'skip';
+/** Night target meaning "stay home tonight" (murderers may pass). */
+export const PASS = 'pass';
 
 export interface GameOptions {
   seed?: number;
@@ -168,7 +172,7 @@ export class Game {
     if (this.player(input.id)) throw new GameError('You already joined this game.');
     const name = input.name.trim().slice(0, 32);
     if (!name) throw new GameError('Name must not be empty.');
-    if (name.toLowerCase() === SKIP) throw new GameError(`"${SKIP}" is reserved.`);
+    if (name.toLowerCase() === SKIP || name.toLowerCase() === PASS) throw new GameError(`"${name}" is reserved.`);
     if (this.state.players.some((p) => p.name.toLowerCase() === name.toLowerCase())) {
       throw new GameError(`The name "${name}" is already taken in this game.`);
     }
@@ -240,24 +244,76 @@ export class Game {
         { scope: 'public' },
         `The game begins with ${s.players.length} players: ${s.players.map((p) => p.publicName).join(', ')}. ` +
           (this.settings.announceRoles
-            ? `Roles in play: ${summarizeRoles(roles)}.`
+            ? `Roles in play: ${summarizeRoles(roles.map(apparentRole))}.`
             : 'The role setup is secret: nobody knows how many of each role are in play.'),
-        { players: s.players.map((p) => p.publicName), roles: this.settings.announceRoles ? countRoles(roles) : undefined },
+        { players: s.players.map((p) => p.publicName), roles: this.settings.announceRoles ? countRoles(roles.map(apparentRole)) : undefined },
       ),
     );
 
-    const murderers = s.players.filter((p) => p.role === 'murderer');
+    const lone = this.loneWolves();
     for (const p of s.players) {
-      const role = ROLES[p.role!];
+      const shown = apparentRole(p.role!);
+      const role = ROLES[shown];
       let text = `Your role: ${role.name}. ${role.description}`;
-      const mates = p.role === 'murderer' ? murderers.filter((m) => m.id !== p.id).map((m) => m.publicName) : [];
+      const mates = this.knowsPartners(p) ? this.partnersOf(p).map((m) => m.publicName) : [];
       if (mates.length) text += ` Your fellow murderers: ${mates.join(', ')}.`;
-      out.push(
-        this.emit('role_assigned', { scope: 'players', ids: [p.id] }, text, { role: p.role, teammates: mates }, p.id),
-      );
+      if (shown === 'murderer' && lone) {
+        text += ' This game the murderers work alone: you do not know the other murderers (if any) and there is no private murderer chat.';
+      }
+      out.push(this.emit('role_assigned', { scope: 'players', ids: [p.id] }, text, { role: shown, teammates: mates }, p.id));
     }
+    // The truth (crazy roles) only for the game master.
+    out.push(
+      this.emit('notice', { scope: 'admin' }, 'Real roles (admin).', {
+        kind: 'real_roles',
+        roles: Object.fromEntries(s.players.map((p) => [p.publicName, p.role])),
+      }),
+    );
     out.push(...this.enterPhase(this.settings.startPhase));
     return out;
+  }
+
+  // ---------------------------------------------------------------- role helpers
+
+  /** With a crazy murderer in play, the murderers do not know each other (otherwise the crazy one would stand out). */
+  loneWolves(): boolean {
+    return this.state.players.some((p) => p.role === 'crazy_murderer');
+  }
+
+  /** Real murderers who know (and can talk to) each other. */
+  knowsPartners(p: Player): boolean {
+    return p.role === 'murderer' && !this.loneWolves();
+  }
+
+  partnersOf(p: Player): Player[] {
+    return this.knowsPartners(p) ? this.state.players.filter((m) => m.role === 'murderer' && m.id !== p.id) : [];
+  }
+
+  /** The night action a player believes to have (crazy roles act like the role they believe in). */
+  believedKind(p: Player): NightActionKind | null {
+    return p.role ? ROLES[apparentRole(p.role)].nightAction : null;
+  }
+
+  // ---------------------------------------------------------------- pause
+
+  /** Freeze the game (e.g. a usage limit ran out): deadlines stop until resume(). */
+  pause(reason: string): GameEvent[] {
+    const s = this.state;
+    if (s.phase === 'lobby' || s.phase === 'ended' || s.pausedAt) return [];
+    s.pausedAt = this.now();
+    s.pauseReason = reason;
+    return [this.emit('notice', { scope: 'public' }, `The game is paused: ${reason}. It continues when everyone is back.`, { kind: 'paused', reason })];
+  }
+
+  resume(): GameEvent[] {
+    const s = this.state;
+    if (!s.pausedAt) return [];
+    const d = this.now() - s.pausedAt;
+    if (s.phaseEndsAt) s.phaseEndsAt += d;
+    if (s.voteDeadlineAt) s.voteDeadlineAt += d;
+    s.pausedAt = null;
+    s.pauseReason = null;
+    return [this.emit('notice', { scope: 'public' }, 'The game continues.', { kind: 'resumed' })];
   }
 
   // ---------------------------------------------------------------- phases
@@ -293,6 +349,7 @@ export class Game {
   /** Enforce deadlines. Returns events if the phase was resolved. */
   tick(): GameEvent[] {
     const s = this.state;
+    if (s.pausedAt) return [];
     if (!s.phaseEndsAt || this.now() < s.phaseEndsAt) return [];
     if (s.phase === 'night') return [this.emit('notice', { scope: 'public' }, 'Time is up for the night.'), ...this.resolveNight()];
     if (s.phase === 'day') {
@@ -333,7 +390,10 @@ export class Game {
       return [this.emit('chat', { scope: 'public' }, `${p.publicName}: ${text}`, { message: text }, p.id)];
     }
     if (!p.alive) throw new GameError('You are dead. Dead players cannot talk.');
-    if (s.phase === 'night' && p.role !== 'murderer') {
+    if (s.phase === 'night' && !this.knowsPartners(p)) {
+      if (p.role && apparentRole(p.role) === 'murderer') {
+        throw new GameError('This game the murderers work alone: there is no private chat at night.');
+      }
       throw new GameError('It is night. Only murderers can talk (privately with each other). Wait for the day.');
     }
     this.checkChatLimits(p, text);
@@ -388,20 +448,31 @@ export class Game {
   // ---------------------------------------------------------------- night
 
   private nightActors(): Player[] {
-    return this.alive().filter((p) => p.role && ROLES[p.role].nightAction);
+    return this.alive().filter((p) => this.believedKind(p));
   }
 
   validNightTargets(p: Player): Player[] {
-    const kind = p.role ? ROLES[p.role].nightAction : null;
+    const kind = this.believedKind(p);
     if (!kind) return [];
+    const s = this.state;
     return this.alive().filter((t) => {
-      if (kind === 'kill') return t.role !== 'murderer';
+      if (kind === 'kill') {
+        if (t.id === p.id) return false;
+        if (!this.knowsPartners(p)) return true;
+        if (t.role === 'murderer') return false;
+        // Separate kills: never the house a partner already goes to.
+        if (this.settings.killMode === 'separate') {
+          return !this.partnersOf(p).some((m) => s.nightChoices[m.id]?.target === t.id);
+        }
+        return true;
+      }
       if (kind === 'track') return t.id !== p.id;
+      if (kind === 'trap') return s.lastTrapped?.[p.id] !== t.id;
       if (kind === 'protect') {
-        if (this.settings.doctorNoRepeat && this.state.lastProtected[p.id] === t.id) return false;
+        if (this.settings.doctorNoRepeat && s.lastProtected[p.id] === t.id) return false;
         if (t.id === p.id) {
           if (this.settings.doctorSelfProtect === 'never') return false;
-          if (this.settings.doctorSelfProtect === 'once' && this.state.selfProtectUsed.includes(p.id)) return false;
+          if (this.settings.doctorSelfProtect === 'once' && s.selfProtectUsed.includes(p.id)) return false;
         }
         return true;
       }
@@ -414,26 +485,41 @@ export class Game {
     const p = this.mustPlayer(playerId);
     if (s.phase !== 'night') throw new GameError('Night actions can only be used at night.');
     if (!p.alive) throw new GameError('You are dead.');
-    const kind = p.role ? ROLES[p.role].nightAction : null;
+    const kind = this.believedKind(p);
     if (!kind) throw new GameError('Your role has no night action. Just wait for the day.');
-    const target = this.resolveTarget(targetRef);
-    if (!this.validNightTargets(p).some((t) => t.id === target.id)) {
-      throw new GameError(
-        `You cannot target ${target.publicName} tonight. Valid targets: ${this.validNightTargets(p)
-          .map((t) => t.publicName)
-          .join(', ')}.`,
-      );
+    let targetId: string;
+    let label: string;
+    if (targetRef.trim().toLowerCase() === PASS) {
+      if (kind !== 'kill') throw new GameError('Only murderers can pass. Choose one of the valid targets.');
+      targetId = PASS;
+      label = 'nobody';
+    } else {
+      const target = this.resolveTarget(targetRef);
+      const valid = this.validNightTargets(p);
+      if (!valid.some((t) => t.id === target.id)) {
+        const partnerThere = kind === 'kill' && this.partnersOf(p).some((m) => s.nightChoices[m.id]?.target === target.id);
+        throw new GameError(
+          (partnerThere
+            ? `Your partner already goes to ${target.publicName}'s house tonight: pick someone else or pass. `
+            : `You cannot target ${target.publicName} tonight. `) +
+            `Valid targets: ${valid.map((t) => t.publicName).join(', ')}${kind === 'kill' ? ', pass' : ''}.`,
+        );
+      }
+      targetId = target.id;
+      label = target.publicName;
     }
     const changed = !!s.nightChoices[p.id];
-    s.nightChoices[p.id] = { kind, target: target.id, at: this.now() };
-    const verb = kind === 'kill' ? 'to kill' : kind === 'protect' ? 'to protect' : 'to track';
+    s.nightChoices[p.id] = { kind, target: targetId, at: this.now() };
+    const verb = { kill: 'to kill', protect: 'to protect', track: 'to track', trap: 'to set a trap at the house of' }[kind];
     const out = this.emitThought(p, thought, 'night action');
     out.push(
       this.emit(
         'night_action',
-        p.role === 'murderer' ? { scope: 'team', team: 'mafia' } : { scope: 'players', ids: [p.id] },
-        `${p.publicName} ${changed ? 'changed their choice and now chose' : 'chose'} ${verb} ${target.publicName}.`,
-        { kind, target: target.id },
+        this.knowsPartners(p) ? { scope: 'team', team: 'mafia' } : { scope: 'players', ids: [p.id] },
+        targetId === PASS
+          ? `${p.publicName} ${changed ? 'changed their mind and' : ''} will stay home tonight (pass).`.replace('  ', ' ')
+          : `${p.publicName} ${changed ? 'changed their choice and now chose' : 'chose'} ${verb} ${label}.`,
+        { kind, target: targetId },
         p.id,
       ),
     );
@@ -442,20 +528,21 @@ export class Game {
   }
 
   nightComplete(): boolean {
-    return this.nightActors().every((p) => this.state.nightChoices[p.id] || this.validNightTargets(p).length === 0);
+    return this.nightActors().every(
+      (p) => this.state.nightChoices[p.id] || (this.believedKind(p) !== 'kill' && this.validNightTargets(p).length === 0),
+    );
   }
 
-  /** The target the murderers agreed on: plurality of their choices, ties broken by the most recent choice. */
+  /** 'shared' kill mode: the target the murderers agreed on (plurality, ties to the most recent choice). */
   private murderTarget(): { target: string; killer: string } | null {
     const choices = Object.entries(this.state.nightChoices)
-      .filter(([, c]) => c.kind === 'kill')
+      .filter(([id, c]) => c.kind === 'kill' && c.target !== PASS && this.player(id)?.role === 'murderer')
       .sort((a, b) => a[1].at - b[1].at);
     if (!choices.length) return null;
     const counts = new Map<string, number>();
     for (const [, c] of choices) counts.set(c.target, (counts.get(c.target) ?? 0) + 1);
     const max = Math.max(...counts.values());
     const top = [...counts.entries()].filter(([, n]) => n === max).map(([t]) => t);
-    // Most recent choice among top targets wins, and that murderer performs the kill.
     for (let i = choices.length - 1; i >= 0; i--) {
       const [killer, c] = choices[i];
       if (top.includes(c.target)) return { target: c.target, killer };
@@ -463,75 +550,157 @@ export class Game {
     return null;
   }
 
+  /**
+   * Night resolution. Every action is a visit to a house: traps first (every visitor of a trapped house fails), then
+   * protections, kills and finally information (tracker, trapper). Crazy roles never leave home: their actions do
+   * nothing and their reports are always wrong.
+   */
   private resolveNight(): GameEvent[] {
     const s = this.state;
+    s.lastTrapped ??= {};
     const out: GameEvent[] = [];
-    const murder = this.murderTarget();
+    const name = (id: string) => this.player(id)!.publicName;
+    const aliveAtNight = this.alive();
 
-    // Who left their house tonight, and where they went.
-    const visits = new Map<string, string>();
-    if (murder) visits.set(murder.killer, murder.target);
-    const protectedIds = new Set<string>();
+    interface Visit {
+      from: string;
+      to: string;
+      kind: NightActionKind;
+      /** Stayed home: self-targeted, or a crazy role. */
+      home: boolean;
+      crazy: boolean;
+      caught: boolean;
+    }
+    const shared = this.settings.killMode === 'shared' ? this.murderTarget() : null;
+    const visits: Visit[] = [];
     for (const [pid, c] of Object.entries(s.nightChoices)) {
+      if (c.target === PASS) continue;
+      const p = this.player(pid)!;
+      // Shared kills: only the murderer who performs the kill leaves the house.
+      if (c.kind === 'kill' && shared && p.role === 'murderer' && shared.killer !== pid) continue;
+      const crazy = isCrazy(p.role);
+      visits.push({ from: pid, to: c.target, kind: c.kind, home: crazy || c.target === pid, crazy, caught: false });
+      // Bookkeeping is the same for crazy roles, so their options look exactly like the real role's.
       if (c.kind === 'protect') {
-        protectedIds.add(c.target);
-        visits.set(pid, c.target);
         s.lastProtected[pid] = c.target;
         if (c.target === pid && !s.selfProtectUsed.includes(pid)) s.selfProtectUsed.push(pid);
-      } else if (c.kind === 'track') {
-        visits.set(pid, c.target);
       }
+      if (c.kind === 'trap') s.lastTrapped[pid] = c.target;
     }
-    // Doctors who did not act lose their "last protected" restriction.
-    for (const doc of s.players.filter((p) => p.role === 'doctor' && !s.nightChoices[p.id])) delete s.lastProtected[doc.id];
-
-    // Tracker results.
-    for (const [pid, c] of Object.entries(s.nightChoices)) {
-      if (c.kind !== 'track') continue;
-      const tracked = this.player(c.target)!;
-      const dest = visits.get(tracked.id);
-      const text = dest
-        ? `You followed ${tracked.publicName} last night: they visited ${this.player(dest)!.publicName}'s house.`
-        : `You followed ${tracked.publicName} last night: they stayed home.`;
-      out.push(this.emit('tracker_result', { scope: 'players', ids: [pid] }, text, { tracked: tracked.id, visited: dest ?? null }, pid));
+    for (const p of s.players) {
+      if (s.nightChoices[p.id]) continue;
+      const kind = this.believedKind(p);
+      if (kind === 'protect') delete s.lastProtected[p.id];
+      if (kind === 'trap') delete s.lastTrapped[p.id];
     }
 
-    let victim: Player | null = null;
-    if (murder) {
-      const target = this.player(murder.target)!;
-      if (protectedIds.has(target.id)) {
+    // 1. Traps: every visitor of a trapped house walks into it (owners inside their own house do not).
+    const traps = new Map<string, string[]>();
+    for (const v of visits) if (v.kind === 'trap' && !v.crazy) traps.set(v.to, [...(traps.get(v.to) ?? []), v.from]);
+    for (const v of visits) if (!v.crazy && !v.home && v.kind !== 'trap' && traps.has(v.to)) v.caught = true;
+    for (const v of visits.filter((x) => x.caught)) {
+      const failed = { kill: 'You killed nobody.', protect: 'You protected nobody.', track: 'You learned nothing.', trap: '' }[v.kind];
+      out.push(
+        this.emit('trap_result', { scope: 'players', ids: [v.from] }, `You walked into a trap in front of ${name(v.to)}'s house last night. ${failed}`, {
+          house: v.to,
+          caught: true,
+        }, v.from),
+      );
+    }
+    for (const v of visits.filter((x) => x.kind === 'trap')) {
+      const where = v.to === v.from ? 'your house' : `${name(v.to)}'s house`;
+      let roles = visits.filter((x) => x.caught && x.to === v.to).map((x) => ROLES[this.player(x.from)!.role!].name);
+      if (v.crazy) {
+        // Always wrong: a catch when nobody came, nothing when somebody did.
+        const cameAnyway = visits.some((x) => !x.crazy && !x.home && x.kind !== 'trap' && x.to === v.to);
+        const inPlay = [...new Set(s.players.map((x) => apparentRole(x.role!)))].filter((r) => r === 'murderer' || r === 'doctor' || r === 'tracker');
+        roles = cameAnyway ? [] : [ROLES[pick<RoleId>(s, inPlay.length ? inPlay : ['murderer'])].name];
+      }
+      out.push(
+        this.emit(
+          'trap_result',
+          { scope: 'players', ids: [v.from] },
+          roles.length
+            ? `Your trap in front of ${where} caught someone last night: ${roles.map((r) => `a ${r}`).join(' and ')}.`
+            : `Nobody walked into your trap in front of ${where} last night.`,
+          { house: v.to, caughtRoles: roles },
+          v.from,
+        ),
+      );
+    }
+
+    // 2. Protections and 3. kills.
+    const protectors = new Map<string, string[]>();
+    for (const v of visits) if (v.kind === 'protect' && !v.crazy && !v.caught) protectors.set(v.to, [...(protectors.get(v.to) ?? []), v.from]);
+    const victims: Player[] = [];
+    const saved: string[] = [];
+    const attacked = [...new Set(visits.filter((v) => v.kind === 'kill' && !v.crazy && !v.caught).map((v) => v.to))];
+    for (const id of attacked) {
+      const t = this.player(id)!;
+      if (!t.alive) continue;
+      const docs = protectors.get(id);
+      if (docs) {
+        saved.push(id);
         if (this.settings.doctorLearnsSave) {
-          const doctors = Object.entries(s.nightChoices)
-            .filter(([, c]) => c.kind === 'protect' && c.target === target.id)
-            .map(([id]) => id);
           out.push(
-            this.emit('doctor_result', { scope: 'players', ids: doctors }, `Your patient ${target.publicName} was attacked last night, and you saved them!`, { saved: target.id }),
+            this.emit('doctor_result', { scope: 'players', ids: docs }, `Your patient ${t.publicName} was attacked last night, and you saved them!`, { saved: id }),
           );
         }
-      } else {
-        victim = target;
-        target.alive = false;
-        target.death = { round: s.round, phase: 'night', cause: 'killed' };
+        continue;
       }
+      t.alive = false;
+      t.death = { round: s.round, phase: 'night', cause: 'killed' };
+      victims.push(t);
     }
 
-    const reveal = victim && this.settings.revealRoleOnDeath ? ` They were a ${ROLES[victim.role!].name}.` : '';
+    // 4. Tracker results (crazy trackers always get a wrong answer).
+    const wentTo = (pid: string) => visits.find((v) => v.from === pid && !v.home)?.to ?? null;
+    for (const v of visits.filter((x) => x.kind === 'track' && !x.caught)) {
+      const tracked = this.player(v.to)!;
+      let dest = wentTo(tracked.id);
+      if (v.crazy) {
+        const wrong = [null, ...aliveAtNight.map((x) => x.id).filter((id) => id !== tracked.id)].filter((x) => x !== dest);
+        dest = pick(s, wrong);
+      }
+      const place = dest === v.from ? 'your house' : dest ? `${name(dest)}'s house` : null;
+      out.push(
+        this.emit(
+          'tracker_result',
+          { scope: 'players', ids: [v.from] },
+          place ? `You followed ${tracked.publicName} last night: they visited ${place}.` : `You followed ${tracked.publicName} last night: they stayed home.`,
+          { tracked: tracked.id, visited: dest },
+          v.from,
+        ),
+      );
+    }
+
+    const revealRole = (p: Player) => (this.settings.revealRoleOnDeath ? ` ${p.publicName} was a ${ROLES[p.role!].name}.` : '');
+    const names = victims.map((v) => v.publicName);
     out.push(
       this.emit(
         'night_resolved',
         { scope: 'public' },
-        victim ? `Dawn breaks. ${victim.publicName} was found dead.${reveal}` : 'Dawn breaks. Nobody died last night.',
-        { victim: victim?.id ?? null, victimRole: victim && this.settings.revealRoleOnDeath ? victim.role : undefined },
+        victims.length
+          ? `Dawn breaks. ${names.join(' and ')} ${victims.length > 1 ? 'were' : 'was'} found dead.${victims.map(revealRole).join('')}`
+          : 'Dawn breaks. Nobody died last night.',
+        {
+          victim: victims[0]?.id ?? null,
+          victims: victims.map((v) => v.id),
+          victimRole: victims[0] && this.settings.revealRoleOnDeath ? victims[0].role : undefined,
+        },
       ),
     );
-    // Hidden details go to a separate admin-only event.
+    // Hidden details (who went where) for the god view and the night animation.
     out.push(
       this.emit('notice', { scope: 'admin' }, 'Night summary (admin).', {
         kind: 'night_summary',
-        victim: victim?.id ?? null,
-        attempted: murder?.target ?? null,
-        killer: murder?.killer ?? null,
-        saved: murder && !victim ? murder.target : null,
+        victim: victims[0]?.id ?? null,
+        victims: victims.map((v) => v.id),
+        attempted: attacked[0] ?? null,
+        killer: visits.find((v) => v.kind === 'kill' && !v.crazy && v.to === victims[0]?.id)?.from ?? null,
+        saved: saved[0] ?? null,
+        savedAll: saved,
+        visits,
         choices: { ...s.nightChoices },
       }),
     );
@@ -539,6 +708,39 @@ export class Game {
     const win = this.checkWin();
     if (win) out.push(...this.endGame(win.winner, win.reason));
     else out.push(...this.enterPhase('day'));
+    return out;
+  }
+
+  // ---------------------------------------------------------------- gunman
+
+  shoot(playerId: string, targetRef: string, thought?: string): GameEvent[] {
+    const s = this.state;
+    const p = this.mustPlayer(playerId);
+    if (s.phase !== 'day') throw new GameError('You can only shoot during the day.');
+    if (!p.alive) throw new GameError('You are dead.');
+    if (!p.role || ROLES[p.role].dayAction !== 'shoot') throw new GameError('You have no gun.');
+    s.shotsFired ??= {};
+    if ((s.shotsFired[p.id] ?? 0) >= 1) throw new GameError('You already used your only bullet.');
+    const t = this.resolveTarget(targetRef);
+    if (!t.alive) throw new GameError(`${t.publicName} is already dead.`);
+    if (t.id === p.id) throw new GameError('You cannot shoot yourself.');
+    s.shotsFired[p.id] = 1;
+    s.revealed = [...new Set([...(s.revealed ?? []), p.id])];
+    t.alive = false;
+    t.death = { round: s.round, phase: 'day', cause: 'shot' };
+    delete s.votes[t.id];
+    for (const [voter, target] of Object.entries(s.votes)) if (target === t.id) delete s.votes[voter];
+    const reveal = this.settings.revealRoleOnDeath ? ` ${t.publicName} was a ${ROLES[t.role!].name}.` : '';
+    const out = this.emitThought(p, thought, 'shot');
+    out.push(
+      this.emit('shot', { scope: 'public' }, `Bang! ${p.publicName} is the Gunman and shot ${t.publicName}.${reveal}`, {
+        target: t.id,
+        role: this.settings.revealRoleOnDeath ? t.role : undefined,
+      }, p.id),
+    );
+    const win = this.checkWin();
+    if (win) return [...out, ...this.endGame(win.winner, win.reason)];
+    if (Object.keys(s.votes).length >= this.alive().length) out.push(...this.resolveDay());
     return out;
   }
 
@@ -685,7 +887,16 @@ export class Game {
     s.endedAt = this.now();
     s.phaseEndsAt = null;
     const roster = s.players.map((p) => `${p.publicName} (${ROLES[p.role!]?.name ?? '?'}${p.alive ? '' : ', dead'})`).join(', ');
+    const truth = s.players
+      .filter((p) => isCrazy(p.role))
+      .map((p) =>
+        this.emit('notice', { scope: 'players', ids: [p.id] }, `The truth: you were a ${ROLES[p.role!].name}. Your actions had no effect and your results were not real.`, {
+          kind: 'crazy_reveal',
+          role: p.role,
+        }, p.id),
+      );
     return [
+      ...truth,
       this.emit('game_ended', { scope: 'public' }, `${reason} Roles: ${roster}.`, {
         winner,
         reason,
@@ -708,33 +919,53 @@ export class Game {
     if (s.phase === 'ended') return { kind: 'none', done: true, hint: 'The game is over. Write your reflection.' };
     if (!p.alive) return { kind: 'none', done: true, hint: 'You are dead. You can only watch.' };
     if (s.phase === 'night') {
-      const kind = p.role ? ROLES[p.role].nightAction : null;
+      const kind = this.believedKind(p);
       if (!kind) return { kind: 'none', done: true, hint: 'You have no night action. Wait for the day.' };
       const options = this.validNightTargets(p).map((t) => t.publicName);
+      if (kind === 'kill') options.push(PASS);
       const choice = s.nightChoices[p.id];
-      const verb = kind === 'kill' ? 'kill' : kind === 'protect' ? 'protect' : 'track';
+      const verb = { kill: 'kill', protect: 'protect', track: 'track', trap: 'trap the house of' }[kind];
+      const partners =
+        kind === 'kill'
+          ? this.partnersOf(p)
+              .filter((m) => m.alive && s.nightChoices[m.id])
+              .map((m) => {
+                const t = s.nightChoices[m.id].target;
+                return `${m.publicName} ${t === PASS ? 'passes' : `goes to ${this.player(t)!.publicName}`}`;
+              })
+          : [];
       return {
         kind: 'night_action',
         actionKind: kind,
         options,
         done: !!choice,
-        hint: choice
-          ? `You chose to ${verb} ${this.player(choice.target)!.publicName}. You may change it until the night ends.`
-          : `Choose a player to ${verb} with night_action.`,
+        hint:
+          (choice
+            ? choice.target === PASS
+              ? 'You chose to stay home tonight. You may change it until the night ends.'
+              : `You chose to ${verb} ${this.player(choice.target)!.publicName}. You may change it until the night ends.`
+            : kind === 'kill'
+              ? 'Choose a victim with night_action, or target "pass" to stay home tonight.'
+              : `Choose a player to ${verb} with night_action.`) + (partners.length ? ` Your partners: ${partners.join('; ')}.` : ''),
       };
     }
     const options = this.alive()
       .filter((t) => t.id !== p.id)
       .map((t) => t.publicName);
+    const shootOptions = [...options];
     if (this.settings.allowSkipVote) options.push(SKIP);
     const v = s.votes[p.id];
+    const canShoot = !!p.role && ROLES[p.role].dayAction === 'shoot' && !(s.shotsFired?.[p.id] ?? 0);
     return {
       kind: 'vote',
       options,
       done: !!v,
-      hint: v
-        ? `You voted for ${v === SKIP ? SKIP : this.player(v)!.publicName}. You may change your vote until everyone has voted.`
-        : 'Discuss, then vote. The day ends when every living player has voted.',
+      ...(canShoot ? { dayAction: { kind: 'shoot' as const, options: shootOptions } } : {}),
+      hint:
+        (v
+          ? `You voted for ${v === SKIP ? SKIP : this.player(v)!.publicName}. You may change your vote until everyone has voted.`
+          : 'Discuss, then vote. The day ends when every living player has voted.') +
+        (canShoot ? ' You still have your one bullet: shoot kills a player at once and reveals you as the Gunman.' : ''),
     };
   }
 
@@ -744,8 +975,10 @@ export class Game {
     const isAdmin = viewerId === null;
     const me = viewerId ? this.player(viewerId) ?? null : null;
     const anonymous = this.settings.identityVisibility === 'anonymous';
-    const myTeam: Team | null = me?.role ? teamOf(me.role) : null;
     const ended = s.phase === 'ended';
+    // Crazy roles see the role they believe in until the game is over.
+    const myRole: RoleId | null = me?.role ? (ended ? me.role : apparentRole(me.role)) : null;
+    const knowsMates = !!me && this.knowsPartners(me);
 
     const players: PublicPlayer[] = s.players.map((p) => {
       const pub: PublicPlayer = { id: p.id, name: p.publicName, alive: p.alive, ready: p.ready, death: p.death };
@@ -760,12 +993,13 @@ export class Game {
       const revealed =
         isAdmin ||
         ended ||
-        p.id === viewerId ||
         (!p.alive && this.settings.revealRoleOnDeath) ||
-        (myTeam === 'mafia' && p.role === 'murderer');
-      if (revealed && p.role) {
-        pub.role = p.role;
-        pub.team = teamOf(p.role);
+        !!s.revealed?.includes(p.id) ||
+        (knowsMates && p.role === 'murderer');
+      const shown = revealed ? p.role : p.id === viewerId ? myRole : null;
+      if (shown) {
+        pub.role = shown;
+        pub.team = teamOf(shown);
       }
       return pub;
     });
@@ -784,18 +1018,16 @@ export class Game {
       settings: s.settings,
       winner: s.winner,
       isAdmin,
+      paused: s.pausedAt ? { since: s.pausedAt, reason: s.pauseReason ?? '' } : null,
       you: me
         ? {
             id: me.id,
             name: me.publicName,
-            role: me.role,
-            team: myTeam,
+            role: myRole,
+            team: myRole ? teamOf(myRole) : null,
             alive: me.alive,
-            roleDescription: me.role ? ROLES[me.role].description : null,
-            teammates:
-              me.role === 'murderer'
-                ? s.players.filter((p) => p.role === 'murderer' && p.id !== me.id).map((p) => p.publicName)
-                : [],
+            roleDescription: myRole ? ROLES[myRole].description : null,
+            teammates: this.partnersOf(me).map((p) => p.publicName),
           }
         : null,
       players,

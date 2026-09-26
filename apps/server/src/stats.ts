@@ -1,5 +1,7 @@
-import type { GameSettings } from '@palermo/engine';
+import { teamOf, type GameSettings, type RoleId } from '@palermo/engine';
 import type { Db } from './db.ts';
+
+const isMafia = (role: string | undefined) => !!role && teamOf(role as RoleId) === 'mafia';
 
 /**
  * Aggregate statistics over finished games. Every game stores its full settings snapshot, so any setting
@@ -195,11 +197,18 @@ export function computeStats(db: Db, filter: StatsFilter = { settings: {} }): St
         }
       } else if (e.type === 'notice' && data.kind === 'day_votes') {
         for (const [voter, target] of Object.entries(data.votes as Record<string, string>)) {
-          if (roleOf.get(voter) === 'murderer') continue;
+          if (isMafia(roleOf.get(voter))) continue;
           const b = byPlayer.get(voter);
           if (!b || target === 'skip') continue;
           b.townVotes++;
-          if (roleOf.get(target) === 'murderer') b.townVotesOnMafia++;
+          if (isMafia(roleOf.get(target))) b.townVotesOnMafia++;
+        }
+      } else if (e.type === 'notice' && data.kind === 'night_summary' && Array.isArray(data.visits)) {
+        const dead = new Set((data.victims as string[] | undefined) ?? []);
+        for (const v of data.visits as { from: string; to: string; kind: string; crazy: boolean; caught: boolean }[]) {
+          if (v.kind !== 'kill' || v.crazy || v.caught || !dead.has(v.to)) continue;
+          const kb = byPlayer.get(v.from);
+          if (kb) kb.kills++;
         }
       } else if (e.type === 'notice' && data.kind === 'night_summary' && data.victim && data.killer) {
         const kb = byPlayer.get(data.killer as string);

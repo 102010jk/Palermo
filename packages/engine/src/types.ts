@@ -1,17 +1,38 @@
-export type RoleId = 'murderer' | 'doctor' | 'tracker' | 'civilian';
+export type RoleId =
+  | 'murderer'
+  | 'doctor'
+  | 'tracker'
+  | 'trapper'
+  | 'gunman'
+  | 'civilian'
+  | 'crazy_murderer'
+  | 'crazy_doctor'
+  | 'crazy_tracker'
+  | 'crazy_trapper';
 export type Team = 'town' | 'mafia';
 export type Phase = 'lobby' | 'night' | 'day' | 'ended';
 export type PlayerKind = 'human' | 'ai' | 'bot';
 export type Winner = Team | 'draw';
 
 /** What a night role does when it acts. New roles plug in by adding a kind here and handling it in resolveNight. */
-export type NightActionKind = 'kill' | 'protect' | 'track';
+export type NightActionKind = 'kill' | 'protect' | 'track' | 'trap';
+/** Actions used during the day (the gunman's single shot). */
+export type DayActionKind = 'shoot';
 
 export interface GameSettings {
   /** Free-form label shown in the UI and usable as a stats filter, e.g. "classic". */
   mode: string;
-  /** Explicit role list (length must equal player count) or 'auto' to use the default table. */
+  /** Explicit role list (length must equal player count) or 'auto' to use the default table / roleCounts. */
   roles: RoleId[] | 'auto';
+  /**
+   * With roles 'auto': how many of each special role (the rest are civilians). null = default table by player count.
+   */
+  roleCounts: Partial<Record<RoleId, number>> | null;
+  /**
+   * 'separate': every murderer picks their own victim (never the same house as a partner) or passes;
+   * 'shared': the murderers agree on one victim per night (older games).
+   */
+  killMode: 'separate' | 'shared';
   startPhase: 'night' | 'day';
   /** Reveal the role of a player when they die. */
   revealRoleOnDeath: boolean;
@@ -77,7 +98,7 @@ export interface Player extends PlayerInput {
   role: RoleId | null;
   alive: boolean;
   ready: boolean;
-  death?: { round: number; phase: 'night' | 'day'; cause: 'killed' | 'eliminated' };
+  death?: { round: number; phase: 'night' | 'day'; cause: 'killed' | 'eliminated' | 'shot' };
 }
 
 export type Visibility =
@@ -101,6 +122,8 @@ export type EventType =
   | 'night_resolved'
   | 'tracker_result'
   | 'doctor_result'
+  | 'trap_result'
+  | 'shot'
   | 'thought'
   | 'notice'
   | 'game_ended';
@@ -149,6 +172,15 @@ export interface GameState {
   lastProtected: Record<string, string>;
   /** doctorIds that already used their one self-protect. */
   selfProtectUsed: string[];
+  /** trapperId -> house trapped last night (no trap on the same house two nights in a row). */
+  lastTrapped?: Record<string, string>;
+  /** gunmanId -> shots fired (one bullet per game). */
+  shotsFired?: Record<string, number>;
+  /** Players whose role everyone knows (e.g. a gunman after shooting). */
+  revealed?: string[];
+  /** Game paused (e.g. a provider's usage limit ran out): timers are frozen until it resumes. */
+  pausedAt?: number | null;
+  pauseReason?: string | null;
   events: GameEvent[];
   winner: Winner | null;
   /** Stopped by the host (or the runner): not a real result, excluded from statistics. */
@@ -162,6 +194,8 @@ export interface GameState {
 export interface RequiredAction {
   kind: 'ready' | 'night_action' | 'vote' | 'none';
   actionKind?: NightActionKind;
+  /** Extra action available right now (the gunman's shot during the day). */
+  dayAction?: { kind: DayActionKind; options: string[] };
   /** Valid targets as public names. */
   options?: string[];
   done: boolean;
@@ -192,6 +226,7 @@ export interface PlayerView {
   settings: GameSettings;
   winner: Winner | null;
   isAdmin: boolean;
+  paused: { since: number; reason: string } | null;
   you: {
     id: string;
     name: string;

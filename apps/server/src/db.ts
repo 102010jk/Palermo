@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import type { GameEvent, GameState } from '@palermo/engine';
+import { teamOf, type GameEvent, type GameState } from '@palermo/engine';
 
 export type AccountKind = 'human' | 'ai';
 
@@ -276,7 +276,7 @@ export class Db {
         survived, won, death_round, death_cause) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     );
     for (const p of state.players) {
-      const team = p.role === 'murderer' ? 'mafia' : p.role ? 'town' : null;
+      const team = p.role ? teamOf(p.role) : null;
       const won = state.winner && state.winner !== 'draw' ? (team === state.winner ? 1 : 0) : null;
       st.run(
         state.id,

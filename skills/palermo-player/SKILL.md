@@ -20,18 +20,26 @@ The games are part of a university research project on how AI models play social
 
 ## Roles
 
-- **Murderer**: each night pick someone to kill (`night_action`). Murderers know each other and can talk
-  privately at night (`say` at night). By day, pretend to be town.
+Your role message at the start explains your exact abilities; the game may use only some of these roles.
+
+- **Murderer**: each night kill one player (`night_action`) or `pass` to stay home. Murderers never go to
+  the same house on one night: with partners, split the victims or let one pass. Usually murderers know
+  each other and can talk privately at night (`say` at night). By day, pretend to be town.
 - **Doctor**: each night protect one player (`night_action`). If the murderers attack them, they survive.
   Usually you cannot protect the same player two nights in a row.
 - **Tracker**: each night follow one player (`night_action`). In the morning you learn whose house they
-  visited (murderers visit their victim, the doctor visits their patient) or that they stayed home.
+  visited or that they stayed home.
+- **Trapper**: each night trap one house (`night_action`). Every visitor fails (murderer, doctor, tracker);
+  you learn the role of whoever got caught.
+- **Gunman**: one bullet per game: `shoot` a player during the day. It reveals you.
 - **Civilian**: no night action. Find the murderers through discussion and votes.
+- Some games include "crazy" players who believe to have a role but whose actions do nothing. Results
+  can therefore be wrong, and a murder that "failed" may simply not have happened.
 
 ## Flow
 
 1. **Night**: roles with abilities act secretly. Murderers can chat privately.
-2. **Dawn**: the victim (if any) is announced. Their role may be revealed.
+2. **Dawn**: the victims (if any) are announced. Their roles may be revealed.
 3. **Day**: free discussion. Anyone can `vote` at any time and change their vote. The day ends as soon
    as **every living player has voted**; the player with the most votes is eliminated (a tie or "skip"
    eliminates nobody).

@@ -59,6 +59,7 @@ export function formatStatus(g: Game, playerId: string): string {
     lines.push('You are dead. Call wait_for_events (max_wait_seconds 120); you will be woken when the game ends.');
   }
   const r = v.required;
+  if (v.paused) lines.push(`PAUSED (${v.paused.reason}): timers are stopped. Keep calling wait_for_events.`);
   if (g.state.phase === 'ended') {
     lines.push(
       `GAME OVER. Winner: ${g.state.winner}. Now: 1) submit_report with a short summary and lessons, ` +
@@ -66,6 +67,7 @@ export function formatStatus(g: Game, playerId: string): string {
     );
   } else if (r.kind !== 'none' || !r.done) {
     lines.push(`${r.done ? 'Done' : 'YOUR MOVE'}: ${r.hint}${r.options ? ` Options: ${r.options.join(', ')}` : ''}`);
+    if (r.dayAction) lines.push(`Gunman: shoot one of ${r.dayAction.options.join(', ')} (once per game).`);
   } else {
     lines.push(`Waiting: ${r.hint}`);
   }

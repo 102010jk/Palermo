@@ -254,13 +254,30 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
   registerTool(
     'night_action',
     {
-      description: 'Night only: use your role ability on a player (murderer: kill, doctor: protect, tracker: follow).',
+      description:
+        'Night only: use your role ability on a player (murderer: kill, or target "pass" to stay home; doctor: protect; ' +
+        'tracker: follow; trapper: trap their house).',
       inputSchema: { target: z.string().min(1).max(40), thought },
     },
     guard(async (args: { target: string; thought?: string }) => {
       const { game, playerId } = seat();
       manager.apply(game.state.id, (g) => g.nightAction(playerId, args.target, args.thought));
       return text('Night action recorded. You may change it until the night ends. Call wait_for_events.');
+    }),
+  );
+
+  registerTool(
+    'shoot',
+    {
+      description:
+        'Gunman only, during the day: fire your single bullet at a player. They die at once and everyone learns you are the Gunman.',
+      inputSchema: { target: z.string().min(1).max(40), thought },
+      annotations: { destructiveHint: false },
+    },
+    guard(async (args: { target: string; thought?: string }) => {
+      const { game, playerId } = seat();
+      manager.apply(game.state.id, (g) => g.shoot(playerId, args.target, args.thought));
+      return text(formatStatus(manager.get(game.state.id)!, playerId));
     }),
   );
 

@@ -226,7 +226,7 @@ export function GamePage({ gameId }: { gameId: string }) {
   const isAlive = (p: PublicPlayer) => (replayState ? !replayState.dead.has(p.id) : p.alive);
   const startedAt = events.find((e) => e.type === 'game_started')?.at ?? events[0]?.at ?? 0;
   const replayClock = replay && shownEvents.length ? fmtTime((shownEvents[shownEvents.length - 1].at ?? startedAt) - startedAt) : null;
-  const canChat = !replay && (view.phase === 'lobby' || (me?.alive && (view.phase === 'day' || (view.phase === 'night' && me.role === 'murderer'))));
+  const canChat = !replay && (view.phase === 'lobby' || (me?.alive && (view.phase === 'day' || (view.phase === 'night' && me.role === 'murderer' && (me.teammates?.length ?? 0) > 0))));
   const joined = !!me;
 
   return (
@@ -245,6 +245,7 @@ export function GamePage({ gameId }: { gameId: string }) {
             </span>
           )}
           {replayClock && <span className="timer">replay +{replayClock}</span>}
+          {view.paused && !replay && <span className="timer paused">paused: {view.paused.reason}</span>}
           {winner && (
             <span className={`winner ${winner}`}>
               {winner === 'mafia' ? 'Murderers win' : winner === 'town' ? 'Town wins' : 'Draw'}
@@ -440,6 +441,20 @@ export function GamePage({ gameId }: { gameId: string }) {
                 {req.kind === 'vote' && req.done && (
                   <button className="ghost" onClick={() => act('vote', { target: null })}>
                     Withdraw
+                  </button>
+                )}
+                {req.dayAction && (
+                  <button
+                    className="danger"
+                    disabled={!selected || !req.dayAction.options.includes(selected)}
+                    title="Your single bullet: kills at once and reveals you as the Gunman"
+                    onClick={() => {
+                      if (!selected || !confirm(`Shoot ${selected}? You have only one bullet and everyone will know you are the Gunman.`)) return;
+                      act('shoot', { target: selected });
+                      setSelected(null);
+                    }}
+                  >
+                    Shoot {selected ?? ''}
                   </button>
                 )}
               </div>
