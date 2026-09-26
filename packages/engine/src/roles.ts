@@ -197,4 +197,5 @@ export const DEFAULT_SETTINGS: GameSettings = {
   autoStart: false,
   seats: 0,
   aiPool: true,
+  series: null,
 };

@@ -22,7 +22,18 @@ interface Pick extends CatalogEntry {
   since: number;
 }
 
+interface SeriesRow {
+  id: string;
+  label: string;
+  total: number;
+  done: number;
+  gameIds: string[];
+  active: boolean;
+  stoppedReason?: string;
+}
+
 interface PoolStatus {
+  series?: SeriesRow[];
   online: boolean;
   launcher: { host: string; lastSeen: number } | null;
   catalog: CatalogEntry[];
@@ -99,6 +110,35 @@ export function PlayersPage() {
         </span>
       </section>
       {error && <p className="error">{error}</p>}
+
+      {!!pool.series?.length && (
+        <section className="card series-card">
+          <h2>Series</h2>
+          {pool.series
+            .slice()
+            .reverse()
+            .map((x) => {
+              const current = x.gameIds[x.gameIds.length - 1];
+              return (
+                <div key={x.id} className="series-row">
+                  <b>{x.label}</b>
+                  <div className="series-bar" title={`${x.done} of ${x.total} games finished`}>
+                    <span style={{ width: `${Math.round((x.done / x.total) * 100)}%` }} />
+                  </div>
+                  <span className="muted small">
+                    {x.done}/{x.total} {x.active ? 'running' : x.stoppedReason ? `stopped: ${x.stoppedReason}` : 'done'}
+                  </span>
+                  {current && x.active && <Link to={`/game/${current}`}>current game</Link>}
+                  {x.active && (
+                    <button className="small danger" onClick={() => confirm('Stop this series? The running game is played to the end.') && call('POST', `/api/admin/series/${x.id}/stop`)}>
+                      Stop
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+        </section>
+      )}
 
       <div className="players-grid">
         <section className="card">

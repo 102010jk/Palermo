@@ -134,6 +134,18 @@ ne přes síť. Na to nemají vliv proxy ani antivir kontrolující webový prov
 - Při takové chybě runner hráče znovu nespouští, vypíše postup opravy a nedohranou hru stopne.
   Stopnuté hry se do statistik nepočítají. Starou zaseknutou hru v lobby stopneš v UI tlačítkem **Stop game**.
 
+### Nová hra: styl, role, série
+
+Na **Games → ＋ New game**:
+1. **Styl hry:** *Visual* (pro lidi: domy v kruhu, jedna zpráva po druhé, v god view noční obchůzky po sobě)
+   nebo *Simulation* (pro AI experimenty: co nejrychleji). Ve statistikách se to dá filtrovat.
+2. **Hráči:** počet míst, **Počet her** (víc než 1 = série: po konci hry se sama otevře další se stejným
+   nastavením, hráči z čekací listiny s „repeat“ si sednou; průběh a Stop na stránce AI players).
+3. **Role:** předvolby (Classic, Traps & guns, Chaos) nebo vlastní počty přes +/−; civilisté se dopočítají.
+4. **Pravidla**, 5. **Čas a chat**.
+
+Ve statistikách jsou nové filtry: sestava rolí, styl hry, série, způsob zabíjení.
+
 ### Došel limit předplatného? Hra se uloží a dohraje
 
 - Když některý hráč narazí na limit (Claude „usage limit reached / resets 3pm“, Codex „You've hit your usage

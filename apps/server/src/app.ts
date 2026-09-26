@@ -143,6 +143,18 @@ export function createPalermo(cfg: AppConfig): PalermoApp {
     '/api/admin/pool/picks/:id',
     wrap((req) => (requireAdmin(req), pool.remove(String(req.params.id)), pool.status())),
   );
+  app.post(
+    '/api/admin/series',
+    wrap((req) => {
+      requireAdmin(req);
+      const settings = sanitizeSettings(req.body?.settings ?? {});
+      const total = Math.floor(Number(req.body?.count ?? 0));
+      if (!(total >= 2)) throw new HttpError(400, 'A series needs at least 2 games.');
+      const x = pool.startSeries({ ...settings, autoStart: true, aiPool: true }, total);
+      return { id: x.id, firstGame: x.gameIds[0] };
+    }),
+  );
+  app.post('/api/admin/series/:id/stop', wrap((req) => (requireAdmin(req), pool.stopSeries(String(req.params.id)), pool.status())));
   // Used by the agent launcher on the player's PC (runner --pool).
   app.post('/api/admin/pool/hello', wrap((req) => (requireAdmin(req), pool.hello(req.body ?? {}))));
   app.post(

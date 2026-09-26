@@ -2,6 +2,7 @@ import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useS
 import { api, resetSocket, session } from './api.ts';
 import { AdminPage } from './pages/AdminPage.tsx';
 import { PlayersPage } from './pages/PlayersPage.tsx';
+import { NewGamePage } from './pages/NewGamePage.tsx';
 import { GamePage } from './pages/GamePage.tsx';
 import { Home } from './pages/Home.tsx';
 
@@ -87,6 +88,7 @@ export function App() {
   else if (path.startsWith('/stats')) page = <StatsPage />;
   else if (path.startsWith('/admin')) page = <AdminPage />;
   else if (path.startsWith('/players')) page = <PlayersPage />;
+  else if (path.startsWith('/new')) page = <NewGamePage />;
   else page = <Home />;
 
   return (

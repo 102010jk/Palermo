@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import type { Game } from '@palermo/engine';
+import type { Game, GameSettings } from '@palermo/engine';
 import type { Auth } from './auth.ts';
 import { newId, type GameManager } from './manager.ts';
 
@@ -62,8 +62,20 @@ export function shortName(label: string): string {
   return n;
 }
 
+export interface Series {
+  id: string;
+  label: string;
+  total: number;
+  gameIds: string[];
+  settings: Partial<GameSettings>;
+  active: boolean;
+  createdAt: number;
+  stoppedReason?: string;
+}
+
 export class AgentPool {
   picks: Pick[] = [];
+  series: Series[] = [];
   catalog: CatalogEntry[] = [];
   launcher: { host: string; lastSeen: number } | null = null;
 
@@ -77,6 +89,7 @@ export class AgentPool {
       try {
         const saved = JSON.parse(readFileSync(file, 'utf8'));
         this.catalog = saved.catalog ?? [];
+        this.series = saved.series ?? [];
         this.picks = (saved.picks ?? []).map((p: Pick) => {
           // Players of an unfinished game keep their seat: the launcher puts them back (resume).
           const game = p.gameId ? this.manager.liveGame(p.gameId) : null;
@@ -89,11 +102,67 @@ export class AgentPool {
     }
   }
 
+  // ---------------------------------------------------------------- series
+
+  /** "Play N games in a row": the next lobby opens as soon as the previous game is over. */
+  startSeries(settings: Partial<GameSettings>, total: number): Series {
+    const id = newId('s', 3);
+    const label = `${String(settings.mode ?? 'series').slice(0, 30)} ×${total}`;
+    const series: Series = { id, label, total: Math.max(1, Math.min(1000, total)), gameIds: [], settings: { ...settings, series: id }, active: true, createdAt: Date.now() };
+    this.series.push(series);
+    this.nextGame(series);
+    return series;
+  }
+
+  stopSeries(id: string, reason = 'stopped by the host'): void {
+    const x = this.series.find((s) => s.id === id);
+    if (!x || !x.active) return;
+    x.active = false;
+    x.stoppedReason = reason;
+    // An empty lobby of the series would only attract players.
+    const last = x.gameIds.length ? this.manager.liveGame(x.gameIds[x.gameIds.length - 1]) : null;
+    if (last && last.state.phase === 'lobby') this.manager.apply(last.state.id, (g) => g.abort('The series was stopped.'));
+    this.save();
+  }
+
+  private finishedGames(x: Series): number {
+    return x.gameIds.filter((id) => {
+      const g = this.manager.get(id);
+      return g?.state.phase === 'ended' && !g.state.aborted;
+    }).length;
+  }
+
+  private nextGame(x: Series): void {
+    const g = this.manager.create(x.settings);
+    x.gameIds.push(g.state.id);
+    this.save();
+  }
+
+  /** Opens the next game of every running series whose previous game is over. */
+  private advanceSeries(): void {
+    for (const x of this.series) {
+      if (!x.active) continue;
+      const last = x.gameIds.length ? this.manager.get(x.gameIds[x.gameIds.length - 1]) : null;
+      if (last && last.state.phase !== 'ended') continue;
+      if (last?.state.aborted) {
+        this.stopSeries(x.id, 'a game of the series was stopped');
+        continue;
+      }
+      if (x.gameIds.length >= x.total) {
+        x.active = false;
+        this.save();
+        continue;
+      }
+      this.nextGame(x);
+    }
+  }
+
   /**
    * Called every few seconds. When the launcher disappears (agents.bat closed, PC asleep) while its players sit in a
    * running game, the game pauses until they are back, instead of running on without them.
    */
   watch(): void {
+    this.advanceSeries();
     if (this.online || !this.launcher) return;
     for (const p of this.picks) {
       if (p.status !== 'playing' || !p.gameId || !p.accountId) continue;
@@ -108,7 +177,7 @@ export class AgentPool {
   private save(): void {
     if (!this.file) return;
     try {
-      writeFileSync(this.file, JSON.stringify({ picks: this.picks, catalog: this.catalog }, null, 2));
+      writeFileSync(this.file, JSON.stringify({ picks: this.picks, catalog: this.catalog, series: this.series }, null, 2));
     } catch {
       // not fatal
     }
@@ -119,7 +188,14 @@ export class AgentPool {
   }
 
   status() {
-    return { online: this.online, launcher: this.launcher, catalog: this.catalog, picks: this.picks, lobbies: this.openLobbies().map((g) => this.lobbyInfo(g)) };
+    return {
+      online: this.online,
+      launcher: this.launcher,
+      catalog: this.catalog,
+      picks: this.picks,
+      lobbies: this.openLobbies().map((g) => this.lobbyInfo(g)),
+      series: this.series.slice(-10).map((x) => ({ ...x, done: this.finishedGames(x) })),
+    };
   }
 
   add(input: { provider: PoolProvider; model: string; label?: string; name?: string; repeat?: boolean }): Pick {

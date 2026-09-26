@@ -82,6 +82,8 @@ export interface GameSettings {
   seats: number;
   /** AI players from the waiting list (AI players page + agents.bat) may take free seats. */
   aiPool: boolean;
+  /** Series of games this one belongs to ("100 games in a row"), for the stats. null = a single game. */
+  series: string | null;
 }
 
 export interface PlayerInput {

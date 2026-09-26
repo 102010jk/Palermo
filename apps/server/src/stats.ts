@@ -1,4 +1,4 @@
-import { teamOf, type GameSettings, type RoleId } from '@palermo/engine';
+import { ROLE_ORDER, ROLES, teamOf, type GameSettings, type RoleId } from '@palermo/engine';
 import type { Db } from './db.ts';
 
 const isMafia = (role: string | undefined) => !!role && teamOf(role as RoleId) === 'mafia';
@@ -71,7 +71,7 @@ export function modelLabel(p: { kind: string; provider: string | null; model: st
  * Attributes derived from who actually sat at the table. They are filterable like settings, so e.g.
  * "4x Sonnet + 2x Haiku" games never mix with multi-provider games.
  */
-export function lineupOf(players: Row[]): { lineup: string; lineupKind: string; withHumans: string } {
+export function lineupOf(players: Row[]): { lineup: string; lineupKind: string; withHumans: string; roleSetup: string } {
   const counts = new Map<string, number>();
   const providers = new Set<string>();
   const models = new Set<string>();
@@ -89,7 +89,13 @@ export function lineupOf(players: Row[]): { lineup: string; lineupKind: string; 
   const parts = [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([l, n]) => `${l} ×${n}`);
   if (humans) parts.push(`human ×${humans}`);
   const lineupKind = models.size <= 1 ? 'single-model' : providers.size === 1 ? 'single-provider' : 'multi-provider';
-  return { lineup: parts.join(' + '), lineupKind, withHumans: humans ? 'yes' : 'no' };
+  // The roles that were really in play, e.g. "Murderer ×2 + Doctor + Trapper + Civilian ×5".
+  const roleCounts = new Map<string, number>();
+  for (const p of players) if (p.role) roleCounts.set(p.role as string, (roleCounts.get(p.role as string) ?? 0) + 1);
+  const roleSetup = ROLE_ORDER.filter((r) => roleCounts.has(r))
+    .map((r) => `${ROLES[r].name}${roleCounts.get(r)! > 1 ? ` ×${roleCounts.get(r)}` : ''}`)
+    .join(' + ');
+  return { lineup: parts.join(' + '), lineupKind, withHumans: humans ? 'yes' : 'no', roleSetup };
 }
 
 function matches(settings: GameSettings, row: Row, f: StatsFilter, derived: Record<string, string>): boolean {
@@ -120,6 +126,7 @@ export function computeStats(db: Db, filter: StatsFilter = { settings: {} }): St
   for (const g of allEnded) {
     const s = { ...(JSON.parse(g.settings as string) as Record<string, unknown>), ...derivedOf.get(g.id as string) };
     for (const [k, v] of Object.entries(s)) {
+      if (v && typeof v === 'object' && !Array.isArray(v)) continue;
       (settingValues[k] ??= new Set()).add(Array.isArray(v) ? v.join(',') : String(v));
     }
   }

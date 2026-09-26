@@ -189,5 +189,26 @@ describe('server', () => {
     expect((await api('GET', '/api/games')).body.some((g: { id: string }) => g.id === id)).toBe(false);
     expect(app.db.sql.prepare('SELECT COUNT(*) AS n FROM events WHERE game_id = ?').get(id)).toEqual({ n: 0 });
   });
+
+  it('a series opens the next game when one ends and stops when a game is stopped', async () => {
+    for (const g of (await api('GET', '/api/games')).body) if (g.phase === 'lobby') await api('POST', `/api/games/${g.id}/abort`, {});
+    const r = await api('POST', '/api/admin/series', { count: 3, settings: { mode: 'series-t', seats: 3, roleCounts: { murderer: 1 } } });
+    expect(r.status).toBe(200);
+    const first = r.body.firstGame;
+    expect((await api('GET', `/api/games/${first}`)).body.view.settings.series).toBe(r.body.id);
+    // Finish the first game with bots, then the series opens game 2.
+    await api('POST', `/api/games/${first}/bots`, { count: 3 });
+    await api('POST', `/api/games/${first}/start`, { force: true });
+    for (let i = 0; i < 200 && (await api('GET', `/api/games/${first}`)).body.view.phase !== 'ended'; i++) await new Promise((res) => setTimeout(res, 50));
+    app.pool.watch();
+    let series = (await api('GET', '/api/admin/pool')).body.series.find((x: { id: string }) => x.id === r.body.id);
+    expect(series.gameIds).toHaveLength(2);
+    expect(series.done).toBe(1);
+    // Stopping a game of the series stops the series.
+    await api('POST', `/api/games/${series.gameIds[1]}/abort`, {});
+    app.pool.watch();
+    series = (await api('GET', '/api/admin/pool')).body.series.find((x: { id: string }) => x.id === r.body.id);
+    expect(series.active).toBe(false);
+  });
 });
 

@@ -1,3 +1,4 @@
+import { ROLES } from '@palermo/engine';
 import { useEffect, useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { api } from '../api.ts';
@@ -41,6 +42,10 @@ const FILTERS: { key: string; label: string; wide?: boolean }[] = [
   { key: 'lineupKind', label: 'Line-up type' },
   { key: 'lineup', label: 'Exact line-up', wide: true },
   { key: 'withHumans', label: 'Humans' },
+  { key: 'roleSetup', label: 'Role setup', wide: true },
+  { key: 'gameStyle', label: 'Game style' },
+  { key: 'series', label: 'Series' },
+  { key: 'killMode', label: 'Murderers kill' },
   { key: 'mode', label: 'Mode' },
   { key: 'identityVisibility', label: 'Identities' },
   { key: 'notesMode', label: 'Notes' },
@@ -269,11 +274,13 @@ function Panel({ title, colorIndexByKey }: { title?: string; colorIndexByKey: (k
   );
 }
 
+const isMafiaRole = (role: string) => (ROLES as Record<string, { team: string }>)[role]?.team === 'mafia';
+
 function roleRate(b: Bucket, mafia: boolean): number {
   let g = 0;
   let w = 0;
   for (const [role, v] of Object.entries(b.byRole)) {
-    if ((role === 'murderer') === mafia) {
+    if (isMafiaRole(role) === mafia) {
       g += v.games;
       w += v.wins;
     }
@@ -285,7 +292,7 @@ function rateText(b: Bucket, mafia: boolean): string {
   let g = 0;
   let w = 0;
   for (const [role, v] of Object.entries(b.byRole)) {
-    if ((role === 'murderer') === mafia) {
+    if (isMafiaRole(role) === mafia) {
       g += v.games;
       w += v.wins;
     }

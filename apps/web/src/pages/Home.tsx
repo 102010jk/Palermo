@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { api, getSocket, session } from '../api.ts';
 import { Link, useApp } from '../App.tsx';
 import { Character, lookFor } from '../components/Sprites.tsx';
-import { CreateGameForm } from '../components/CreateGameForm.tsx';
 
 interface GameRow {
   id: string;
@@ -192,7 +191,10 @@ export function Home() {
           {isAdmin && (
             <section className="card">
               <h2>New game</h2>
-              <CreateGameForm onCreated={(id) => navigate(`/game/${id}`)} />
+              <p className="muted">Pick the game style, the players and the roles.</p>
+              <Link to="/new" className="button primary">
+                ＋ New game
+              </Link>
             </section>
           )}
 
