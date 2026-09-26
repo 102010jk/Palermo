@@ -100,13 +100,21 @@ const remote = new StreamableHTTPClientTransport(new URL(url), {
   requestInit: { headers: { Authorization: `Bearer ${token}` } },
 });
 
-local.onmessage = (msg) =>
-  remote.send(msg).catch((e) => {
+// Some MCP clients abort tool calls sooner than the default long-poll; PALERMO_MAX_WAIT caps wait_for_events.
+const maxWait = Number(process.env.PALERMO_MAX_WAIT) || 0;
+
+local.onmessage = (msg) => {
+  if (maxWait && msg.method === 'tools/call' && msg.params?.name === 'wait_for_events') {
+    const args = (msg.params.arguments ??= {});
+    args.max_wait_seconds = Math.min(Number(args.max_wait_seconds) || maxWait, maxWait);
+  }
+  return remote.send(msg).catch((e) => {
     log(`request ${msg.method ?? '(response)'} failed: ${describe(e)}`);
     if (msg.id !== undefined) {
       local.send({ jsonrpc: '2.0', id: msg.id, error: { code: -32000, message: `Palermo server unreachable: ${e.message}` } });
     }
   });
+};
 remote.onmessage = (msg) => local.send(msg);
 remote.onerror = (e) => log(`transport error: ${describe(e)}`);
 local.onclose = () => remote.close().finally(() => process.exit(0));

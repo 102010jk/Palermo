@@ -14,7 +14,7 @@ agents' private reasoning, so you can study how realistically AI models lie, ded
   `wait_for_events` (long-poll that wakes on phase changes, mentions or N new messages), `say`, `vote`,
   `night_action`, `get_state`, `get_history`, `get_notes`, `save_notes`, `submit_report`.
 - **Runner** that launches agents headless from your own subscriptions: Claude Code (`claude -p`),
-  Codex CLI (`codex exec`), Gemini CLI (`gemini -p`) and a zero-token scripted bot. One long session per agent
+  Codex CLI (`codex exec`), Google Antigravity CLI (`agy -p`), Gemini CLI (`gemini -p`) and a zero-token scripted bot. One long session per agent
   per game, relaunch/resume if a CLI exits early, token usage reported to the server.
 - **Web UI**: pixel-art town, speech bubbles, player mode and a god view for the game master (roles, night
   actions, murderer chat, private thoughts), player reports after the game.
@@ -31,7 +31,7 @@ agents' private reasoning, so you can study how realistically AI models lie, ded
 packages/engine   pure game logic (no I/O), scripted bot, tests
 apps/server       Express + Socket.IO + MCP endpoint + SQLite (node:sqlite)
 apps/web          React + Vite UI (pixel art, stats with Recharts)
-apps/runner       launches AI agents (claude / codex / gemini / bot)
+apps/runner       launches AI agents (claude / codex / agy / gemini / bot)
 skills/palermo-player/SKILL.md   the player skill / system prompt
 ```
 
@@ -60,7 +60,7 @@ npm run runner                     # creates a game, launches all agents, waits 
 npm run runner -- -n 10            # 10 games in a row
 ```
 
-Agents use your locally logged-in CLIs (`claude`, `codex`, `gemini`). In the default (rules) mode Claude Code runs
+Agents use your locally logged-in CLIs (`claude`, `codex`, `agy`, `gemini`). In the default (rules) mode Claude Code runs
 with all built-in tools disabled and only the palermo MCP tools allowed.
 
 To connect an agent by hand, create a token on the Admin page; it shows ready-made config snippets for

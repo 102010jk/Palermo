@@ -1,14 +1,14 @@
 import type { Api } from './api.ts';
 
-export type AgentProvider = 'claude' | 'codex' | 'gemini' | 'bot';
+export type AgentProvider = 'claude' | 'codex' | 'gemini' | 'agy' | 'bot';
 
 export interface AgentSpec {
   /** Display name in the game (visible to others unless the game is anonymous). */
   name: string;
   provider: AgentProvider;
-  /** Model passed to the CLI, e.g. "opus", "sonnet", "haiku", "gpt-5.5", "gemini-3-flash". */
+  /** Model passed to the CLI, e.g. "opus", "sonnet", "haiku", "gpt-5.6-sol", "gemini-3.8-flash". */
   model?: string;
-  /** Override the CLI executable (default: claude / codex / gemini). */
+  /** Override the CLI executable (default: claude / codex / gemini / agy). */
   command?: string;
   /** Extra CLI arguments appended as-is. */
   extraArgs?: string[];
@@ -65,5 +65,6 @@ export const PROVIDER_NAME: Record<AgentProvider, string> = {
   claude: 'anthropic',
   codex: 'openai',
   gemini: 'google',
+  agy: 'google',
   bot: 'script',
 };

@@ -9,6 +9,7 @@ import { doctor } from './doctor.ts';
 import { botAdapter } from './adapters/bot.ts';
 import { claudeAdapter } from './adapters/claude.ts';
 import { codexAdapter } from './adapters/codex.ts';
+import { agyAdapter } from './adapters/agy.ts';
 import { geminiAdapter } from './adapters/gemini.ts';
 import { continuePrompt, loadSkill, reportPrompt, startPrompt } from './prompt.ts';
 import { PROVIDER_NAME, type Adapter, type AgentContext, type AgentSpec } from './types.ts';
@@ -40,6 +41,7 @@ const ADAPTERS: Record<AgentSpec['provider'], Adapter> = {
   claude: claudeAdapter,
   codex: codexAdapter,
   gemini: geminiAdapter,
+  agy: agyAdapter,
   bot: botAdapter,
 };
 
@@ -178,6 +180,12 @@ function printFatalHelp(fatals: string[]) {
   }
   if (unique.some((f) => f.startsWith('Codex'))) {
     console.log('\n  Codex: run `codex login` once (sign in with ChatGPT) and check the model name with `codex -m <model>`.');
+  }
+  if (unique.some((f) => f.startsWith('agy'))) {
+    console.log(
+      '\n  Antigravity (agy): run `agy` once in a terminal and sign in with Google, then `agy update`.\n' +
+        '  Model names: `agy models` (put one of them into "model" in the config).',
+    );
   }
   if (unique.some((f) => f.startsWith('Gemini'))) {
     console.log('\n  Gemini: run `gemini` once and sign in with Google; check the model name with `gemini -m <model>`.');

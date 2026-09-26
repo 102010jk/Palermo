@@ -16,13 +16,18 @@ import { localPipeFor } from './pipe.ts';
 
 const BRIDGE = join(dirname(fileURLToPath(import.meta.url)), 'mcp-bridge.mjs');
 
-function cliVersion(cmd: string): Promise<string | null> {
+async function cliVersion(cmd: string): Promise<string | null> {
+  const out = await cliOutput(cmd, ['--version']);
+  return out ? out.split(/\r?\n/)[0] : null;
+}
+
+function cliOutput(cmd: string, args: string[]): Promise<string | null> {
   return new Promise((resolve) => {
-    const child = crossSpawn(cmd, ['--version'], { stdio: ['ignore', 'pipe', 'ignore'] });
+    const child = crossSpawn(cmd, args, { stdio: ['ignore', 'pipe', 'ignore'] });
     let out = '';
     child.stdout?.on('data', (c: Buffer) => (out += c.toString()));
     child.on('error', () => resolve(null));
-    child.on('close', (code) => resolve(code === 0 ? out.trim().split(/\r?\n/)[0] : null));
+    child.on('close', (code) => resolve(code === 0 ? out.replace(/\x1b\[[0-9;]*m/g, '').trim() : null));
     setTimeout(() => {
       child.kill();
       resolve(null);
@@ -56,9 +61,13 @@ export async function doctor(server: string, api: Api): Promise<void> {
     if (process.env[k] ?? process.env[k.toLowerCase()]) console.log(`note: ${k}=${process.env[k] ?? process.env[k.toLowerCase()]}`);
   }
 
-  for (const cli of ['claude', 'codex', 'gemini']) {
+  for (const cli of ['claude', 'codex', 'agy', 'gemini']) {
     const v = await cliVersion(cli);
     console.log(`${v ? '\x1b[32mOK  \x1b[0m' : '\x1b[33m--  \x1b[0m'} ${cli} CLI: ${v ?? 'not found (only needed if a player uses it)'}`);
+    if (v && cli === 'agy') {
+      const models = await cliOutput('agy', ['models']);
+      if (models) console.log(`      agy models (use one of these names in the config):\n      ${models.split(/\r?\n/).join('\n      ')}`);
+    }
   }
 
   await step('1. server health (GET /api/health)', async () => {

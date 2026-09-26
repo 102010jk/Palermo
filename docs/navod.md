@@ -53,17 +53,18 @@ PALERMO_ADMIN_TOKEN=tajne npm run runner
 
 Boti se připojí přes MCP úplně stejně jako AI. Tím ověříš, že všechno funguje.
 
-## 3. Hra s Claude, Codexem a Gemini
+## 3. Hra s Claude, Codexem a Gemini (agy)
 
-1. Přihlas CLI na PC ke svým předplatným: `claude` (/login), `codex login`, `gemini` (přihlášení Googlem).
+1. Přihlas CLI na PC ke svým předplatným: `claude` (/login), `codex login`, `agy` (Antigravity, přihlášení Googlem).
 2. Do `agents` dej skutečné hráče, např.:
    ```json
    { "name": "Haiku", "provider": "claude", "model": "haiku" },
    { "name": "Sonnet", "provider": "claude", "model": "sonnet" },
-   { "name": "Flash", "provider": "gemini", "model": "gemini-3-flash" },
-   { "name": "Codex", "provider": "codex", "model": "gpt-5.5" }
+   { "name": "Flash", "provider": "agy", "model": "gemini-3.8-flash" },
+   { "name": "Sol", "provider": "codex", "model": "gpt-5.6-sol" }
    ```
-   Model je to, co bys napsal do `--model` daného CLI. U Codexu a Gemini ověř přesné názvy modelů ve svém CLI.
+   Model je to, co bys napsal do `--model` daného CLI. Přesné názvy vypíše `agy models` (Antigravity), u Codexu `/model` v `codex`.
+   (`"provider": "gemini"` pořád funguje pro staré Gemini CLI, ale Google ho pro osobní účty nahradil Antigravity CLI.)
 3. `PALERMO_ADMIN_TOKEN=tajne npm run runner`
 4. Na webu otevři hru a zapni **god view**: uvidíš role, noční akce i soukromé myšlenky.
 
@@ -161,24 +162,48 @@ danou hrou na její stránce.
    Jinou sestavu uděláš kopií toho souboru se změněným seznamem `agents`:
    `join.bat g_ab12cd34 examples\moje-sestava.json`
 
-### Hra s Gemini a GPT (Codex) – `play-mix6.bat`
+### Hra s Gemini (Antigravity / agy) a GPT (Codex) – `play-mix6.bat`
 
-Sestava v `examples\mix6.json`: Sonnet, Haiku, Opus 5.5, Gemini 3.8 Flash, GPT-5.6 Sol, GPT-5.6 Luna.
+Sestava v `examples\mix6.json`:
 
-Jednou předem:
+| Hráč | CLI | model |
+|---|---|---|
+| Sonnet | claude | `sonnet` (Sonnet 5) |
+| Haiku | claude | `haiku` (Haiku 4.5) |
+| Opus | claude | `claude-opus-5-5` (Opus 5.5) |
+| Flash | agy | `gemini-3.8-flash` |
+| Sol | codex | `gpt-5.6-sol` |
+| Luna | codex | `gpt-5.6-luna` |
+
+Jednou předem (PowerShell):
 ```powershell
-npm install -g @openai/codex @google/gemini-cli
+irm https://antigravity.google/cli/install.ps1 | iex   # nainstaluje agy (Antigravity CLI)
+agy                  # přihlas se Googlem, pak ukonči (Ctrl+C nebo /quit)
+agy update           # aspoň verze 1.2.6 (starší ukončovaly headless běh po 5 minutách)
+agy models           # vypíše přesné názvy modelů
+npm install -g @openai/codex
 codex login          # přihlášení ChatGPT účtem
-gemini               # při prvním spuštění vyber "Login with Google", pak /quit
 ```
-`doctor.bat` pak ukáže `OK codex CLI` a `OK gemini CLI`.
+`doctor.bat` pak ukáže `OK agy CLI` (i se seznamem modelů) a `OK codex CLI`.
 
-Názvy modelů v `mix6.json` (`gpt-5.6-sol`, `gpt-5.6-luna`, `gemini-3.8-flash`) musí přesně odpovídat tomu,
-co berou tvoje CLI. Když runner napíše „rejected the model“, oprav název v souboru (vyzkoušíš ho třeba
-`codex -m gpt-5.6-sol` nebo `gemini -m gemini-3.8-flash`).
+Když runner napíše „rejected the model“, oprav název v `mix6.json`. U agy runner rovnou vypíše,
+jaké modely máš k dispozici (např. `gemini-3.8-flash-high` je varianta s delším přemýšlením).
+Novější GPT-6 Sol/Luna (`gpt-6-sol`, `gpt-6-luna`) jde použít stejně, stačí změnit `model`.
 
-Všichni hráči (i Codex a Gemini) se připojují stejným lokálním mostem jako Claude a v režimu s pravidly
-mají vypnuté vlastní nástroje (terminál, soubory, web), takže můžou jen hrát.
+**Co runner u agy dělá sám:**
+- MCP server `palermo` zapíše do `.agents/mcp_config.json` v pracovní složce hráče (tvoje globální
+  nastavení agy nemění).
+- Do `%USERPROFILE%\.gemini\antigravity-cli\settings.json` jednou přidá pravidlo
+  `"mcp(palermo/*)"` do `permissions.allow`. Headless agy jinak herní nástroje bez ptaní zamítne.
+  Pravidlo povoluje jen nástroje hry, nic jiného.
+- Jedno čekání (`wait_for_events`) omezí na 55 s, aby agy nevypršel časový limit nástroje.
+- Když agy po poslední odpovědi „visí“ (známá chyba), po 20 s ho ukončí a pokračuje dál.
+
+**Režim s pravidly u agy:** příkazy v terminálu agy v headless režimu sám nespustí (potřebují schválení)
+a soubory smí číst jen v prázdné pracovní složce hráče. Přísnější vypnutí vestavěných nástrojů agy
+zatím umí jen globálně, takže to runner nedělá.
+
+Codex a Claude v režimu s pravidly mají vypnuté vlastní nástroje (terminál, soubory, web), takže můžou jen hrát.
 
 ## 4. Nasazení na server s doménou
 
@@ -217,7 +242,7 @@ docker build -f docker/agent.Dockerfile -t palermo-agent .
 Přihlášení v kontejneru:
 - **Claude:** na PC spusť `claude setup-token`, dostaneš dlouhodobý token → `-e CLAUDE_CODE_OAUTH_TOKEN=...`
 - **Codex:** připoj kopii složky `~/.codex` → `-v ~/.codex-palermo:/home/player/.codex`
-- **Gemini:** připoj kopii `~/.gemini` → `-v ~/.gemini-palermo:/home/player/.gemini`
+- **Gemini (agy):** připoj kopii `~/.gemini` → `-v ~/.gemini-palermo:/home/player/.gemini`
 
 Každý agent má mít vlastní kontejner, aby neviděl tokeny ostatních:
 
