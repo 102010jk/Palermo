@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import crossSpawn from 'cross-spawn';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -14,6 +15,20 @@ import { localPipeFor } from './pipe.ts';
  */
 
 const BRIDGE = join(dirname(fileURLToPath(import.meta.url)), 'mcp-bridge.mjs');
+
+function cliVersion(cmd: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const child = crossSpawn(cmd, ['--version'], { stdio: ['ignore', 'pipe', 'ignore'] });
+    let out = '';
+    child.stdout?.on('data', (c: Buffer) => (out += c.toString()));
+    child.on('error', () => resolve(null));
+    child.on('close', (code) => resolve(code === 0 ? out.trim().split(/\r?\n/)[0] : null));
+    setTimeout(() => {
+      child.kill();
+      resolve(null);
+    }, 20000).unref();
+  });
+}
 
 function describe(e: unknown): string {
   const err = e as { message?: string; cause?: { code?: string; message?: string } };
@@ -39,6 +54,11 @@ export async function doctor(server: string, api: Api): Promise<void> {
   console.log(`Palermo doctor – node ${process.version} on ${process.platform}, server ${base}\n`);
   for (const k of ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY']) {
     if (process.env[k] ?? process.env[k.toLowerCase()]) console.log(`note: ${k}=${process.env[k] ?? process.env[k.toLowerCase()]}`);
+  }
+
+  for (const cli of ['claude', 'codex', 'gemini']) {
+    const v = await cliVersion(cli);
+    console.log(`${v ? '\x1b[32mOK  \x1b[0m' : '\x1b[33m--  \x1b[0m'} ${cli} CLI: ${v ?? 'not found (only needed if a player uses it)'}`);
   }
 
   await step('1. server health (GET /api/health)', async () => {

@@ -168,13 +168,19 @@ function printFatalHelp(fatals: string[]) {
   const unique = [...new Set(fatals)];
   console.log('\n\x1b[31mThe agents could not play:\x1b[0m');
   for (const f of unique) console.log(`  • ${f}`);
-  if (unique.some((f) => f.includes('not logged in'))) {
+  if (unique.some((f) => f.includes('Claude Code is not logged in'))) {
     console.log(
       '\n  Fix the Claude login: run `claude` once and use /login, or better create a long-lived token with\n' +
         '  `claude setup-token` and set it before starting the runner (works reliably with many parallel players):\n' +
         '    PowerShell: $env:CLAUDE_CODE_OAUTH_TOKEN="<token>"\n' +
         '    bash:       export CLAUDE_CODE_OAUTH_TOKEN=<token>',
     );
+  }
+  if (unique.some((f) => f.startsWith('Codex'))) {
+    console.log('\n  Codex: run `codex login` once (sign in with ChatGPT) and check the model name with `codex -m <model>`.');
+  }
+  if (unique.some((f) => f.startsWith('Gemini'))) {
+    console.log('\n  Gemini: run `gemini` once and sign in with Google; check the model name with `gemini -m <model>`.');
   }
   if (unique.some((f) => f.includes('MCP'))) {
     console.log(

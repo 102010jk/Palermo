@@ -161,6 +161,25 @@ danou hrou na její stránce.
    Jinou sestavu uděláš kopií toho souboru se změněným seznamem `agents`:
    `join.bat g_ab12cd34 examples\moje-sestava.json`
 
+### Hra s Gemini a GPT (Codex) – `play-mix6.bat`
+
+Sestava v `examples\mix6.json`: Sonnet, Haiku, Opus 5.5, Gemini 3.8 Flash, GPT-5.6 Sol, GPT-5.6 Luna.
+
+Jednou předem:
+```powershell
+npm install -g @openai/codex @google/gemini-cli
+codex login          # přihlášení ChatGPT účtem
+gemini               # při prvním spuštění vyber "Login with Google", pak /quit
+```
+`doctor.bat` pak ukáže `OK codex CLI` a `OK gemini CLI`.
+
+Názvy modelů v `mix6.json` (`gpt-5.6-sol`, `gpt-5.6-luna`, `gemini-3.8-flash`) musí přesně odpovídat tomu,
+co berou tvoje CLI. Když runner napíše „rejected the model“, oprav název v souboru (vyzkoušíš ho třeba
+`codex -m gpt-5.6-sol` nebo `gemini -m gemini-3.8-flash`).
+
+Všichni hráči (i Codex a Gemini) se připojují stejným lokálním mostem jako Claude a v režimu s pravidly
+mají vypnuté vlastní nástroje (terminál, soubory, web), takže můžou jen hrát.
+
 ## 4. Nasazení na server s doménou
 
 Na serveru (Linux s Dockerem):
