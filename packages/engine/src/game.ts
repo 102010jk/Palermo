@@ -1064,6 +1064,7 @@ export class Game {
     if (s.phase === 'night') {
       const kind = this.believedKind(p);
       if (!kind) return { kind: 'none', done: true, hint: 'You have no night action. Wait for the day.' };
+      if (s.nightPlanned) return { kind: 'none', done: true, hint: 'The night is under way: actions are locked. Wait for dawn.' };
       const options = this.validNightTargets(p).map((t) => t.publicName);
       if (kind === 'kill') options.push(PASS);
       const choice = s.nightChoices[p.id];
