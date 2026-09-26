@@ -41,6 +41,8 @@ export interface Assignment {
   name: string;
   provider: PoolProvider;
   model: string;
+  /** Back into a seat it already has (after a launcher or server restart): continue the game, don't join. */
+  resume?: boolean;
 }
 
 const PROVIDER_NAME: Record<PoolProvider, string> = { claude: 'anthropic', codex: 'openai', agy: 'google', gemini: 'google', bot: 'script' };
@@ -69,16 +71,37 @@ export class AgentPool {
     private manager: GameManager,
     private auth: Auth,
     private file: string | null,
+    private tokenOf: (accountId: string) => string | null = () => null,
   ) {
     if (file && existsSync(file)) {
       try {
         const saved = JSON.parse(readFileSync(file, 'utf8'));
         this.catalog = saved.catalog ?? [];
-        // Nothing is running right after a restart; everyone waits again.
-        this.picks = (saved.picks ?? []).map((p: Pick) => ({ ...p, status: p.status === 'error' ? 'error' : 'waiting', gameId: undefined, accountId: undefined }));
+        this.picks = (saved.picks ?? []).map((p: Pick) => {
+          // Players of an unfinished game keep their seat: the launcher puts them back (resume).
+          const game = p.gameId ? this.manager.liveGame(p.gameId) : null;
+          if (p.status === 'playing' && game && game.state.phase !== 'ended') return { ...p, since: 0 };
+          return { ...p, status: p.status === 'error' ? 'error' : 'waiting', gameId: undefined, accountId: undefined };
+        });
       } catch {
         // start empty
       }
+    }
+  }
+
+  /**
+   * Called every few seconds. When the launcher disappears (agents.bat closed, PC asleep) while its players sit in a
+   * running game, the game pauses until they are back, instead of running on without them.
+   */
+  watch(): void {
+    if (this.online || !this.launcher) return;
+    for (const p of this.picks) {
+      if (p.status !== 'playing' || !p.gameId || !p.accountId) continue;
+      const game = this.manager.liveGame(p.gameId);
+      if (!game || (game.state.phase !== 'night' && game.state.phase !== 'day')) continue;
+      if (game.state.pausedBy?.includes(p.accountId)) continue;
+      const accountId = p.accountId;
+      this.manager.apply(p.gameId, (g) => g.pause('the AI launcher (agents.bat) is offline', accountId));
     }
   }
 
@@ -184,13 +207,21 @@ export class AgentPool {
     if (Array.isArray(input.catalog) && input.catalog.length) this.catalog = input.catalog.slice(0, 300);
     const running = new Set(input.running ?? []);
     const now = Date.now();
+    const resumes: Assignment[] = [];
     for (const p of this.picks) {
       if (p.status !== 'joining' && p.status !== 'playing') continue;
       const game = p.gameId ? this.manager.get(p.gameId) : null;
       const seated = !!game?.state.players.some((x) => x.accountId === p.accountId);
       if (p.status === 'joining' && seated) p.status = 'playing';
       if (!running.has(p.id) && now - p.since > LAUNCHER_TIMEOUT_MS) {
-        this.finish(p.id, p.gameId); // the launcher no longer runs it (restarted or crashed)
+        // The launcher no longer runs it (restarted, crashed or was closed).
+        const token = p.accountId ? this.tokenOf(p.accountId) : null;
+        if (p.status === 'playing' && game && game.state.phase !== 'ended' && token) {
+          p.since = now;
+          resumes.push({ pickId: p.id, gameId: p.gameId!, token, accountId: p.accountId!, name: p.name, provider: p.provider, model: p.model, resume: true });
+        } else {
+          this.finish(p.id, p.gameId);
+        }
       } else if (p.status === 'joining' && (!game || game.state.phase !== 'lobby')) {
         // The game started without it: not its fault, it waits for the next lobby (the launcher stops the CLI).
         Object.assign(p, { status: 'waiting', gameId: undefined, accountId: undefined, since: now });
@@ -203,7 +234,7 @@ export class AgentPool {
     const active = new Set(this.picks.filter((p) => p.status === 'joining' || p.status === 'playing').map((p) => p.id));
     const cancel = [...running].filter((id) => !active.has(id));
 
-    const assignments: Assignment[] = [];
+    const assignments: Assignment[] = [...resumes];
     for (const g of this.openLobbies()) {
       let free = this.freeSeats(g);
       for (const p of this.picks) {

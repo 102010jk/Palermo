@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { localPipeFor } from '../pipe.ts';
 import { runProcess, short, tryJson } from '../proc.ts';
+import { isUsageLimit } from '../limits.ts';
 import type { Adapter, AgentContext, Launch, RunResult, Usage } from '../types.ts';
 
 /**
@@ -103,6 +104,7 @@ export const claudeAdapter: Adapter = {
     let sid = sessionId;
     let fatal: string | undefined;
     let blocked: string | undefined;
+    let limited: string | undefined;
     const code = await runProcess(ctx.spec.command ?? 'claude', args, {
       cwd: ctx.workdir,
       signal: ctx.signal,
@@ -128,12 +130,14 @@ export const claudeAdapter: Adapter = {
           for (const c of m.message?.content ?? []) {
             if (c.type === 'text' && c.text?.trim()) {
               ctx.log(`💬 ${short(c.text)}`);
-              if (AUTH_ERROR.test(c.text)) fatal = `Claude Code is not logged in: ${short(c.text, 120)}`;
+              if (c.text.length < 400 && isUsageLimit(c.text)) limited = c.text.trim();
+              else if (AUTH_ERROR.test(c.text)) fatal = `Claude Code is not logged in: ${short(c.text, 120)}`;
               if (SAFEGUARD.test(c.text)) blocked = short(c.text, 200);
             }
             if (c.type === 'tool_use') ctx.log(`🔧 ${String(c.name).replace('mcp__palermo__', '')} ${short(JSON.stringify(c.input ?? {}), 200)}`);
           }
         } else if (m.type === 'result') {
+          if (m.is_error && typeof m.result === 'string' && isUsageLimit(m.result)) limited = m.result.trim();
           const u = m.usage ?? {};
           usage = {
             inputTokens: u.input_tokens ?? 0,
@@ -154,6 +158,7 @@ export const claudeAdapter: Adapter = {
         for (const line of readFileSync(bridgeLog, 'utf8').trim().split(/\r?\n/).slice(-6)) ctx.log(`bridge: ${line}`);
       }
     }
-    return { exitCode: code, sessionId: sid, usage, fatal, blocked };
+    if (limited) fatal = undefined;
+    return { exitCode: code, sessionId: sid, usage, fatal, blocked, limited };
   },
 };

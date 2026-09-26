@@ -38,6 +38,10 @@ export interface AgentContext {
   skill: string;
   api: Api;
   log: (line: string) => void;
+  /** The player's account on the server (the game can pause waiting for it). */
+  accountId?: string;
+  /** Sit back into an existing seat (after a restart) instead of joining. */
+  resuming?: boolean;
   /** Aborted when the agent must stop (removed from the AI waiting list, or the game started without it). */
   signal?: AbortSignal;
   /** Report the exact model the CLI resolved (e.g. "sonnet" -> "claude-sonnet-5") so stats are precise. */
@@ -59,6 +63,8 @@ export interface RunResult {
   usage?: Usage;
   /** The provider's safety filter refused the conversation: resuming it would fail again, start a new one. */
   blocked?: string;
+  /** The subscription's usage limit ran out (the message, which often says when it resets). */
+  limited?: string;
 }
 
 export interface Adapter {

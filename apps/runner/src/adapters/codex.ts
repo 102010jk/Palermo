@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { localPipeFor } from '../pipe.ts';
 import { runProcess, short, tryJson } from '../proc.ts';
+import { isUsageLimit } from '../limits.ts';
 import type { Adapter, AgentContext, Launch, RunResult, Usage } from '../types.ts';
 
 const BRIDGE = join(dirname(fileURLToPath(import.meta.url)), '..', 'mcp-bridge.mjs');
@@ -94,6 +95,7 @@ export const codexAdapter: Adapter = {
     const usage: Usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null, durationMs: null };
     let sid: string | undefined;
     let fatal: string | undefined;
+    let limited: string | undefined;
     const home = playerCodexHome(ctx);
     const started = Date.now();
     const code = await runProcess(ctx.spec.command ?? 'codex', args, {
@@ -103,7 +105,8 @@ export const codexAdapter: Adapter = {
       onErr: (l) => {
         if (/WARNING: proceeding|Reading additional input/.test(l)) return;
         ctx.log(`stderr: ${short(l)}`);
-        if (AUTH_ERROR.test(l)) fatal = 'Codex is not logged in (run `codex login` once)';
+        if (isUsageLimit(l)) limited = l.trim();
+        else if (AUTH_ERROR.test(l)) fatal = 'Codex is not logged in (run `codex login` once)';
       },
       onLine: (line) => {
         const m = tryJson(line);
@@ -134,7 +137,8 @@ export const codexAdapter: Adapter = {
         if (m.type === 'error' || m.type === 'turn.failed') {
           const text = JSON.stringify(m);
           ctx.log(`error: ${short(text, 300)}`);
-          if (AUTH_ERROR.test(text)) fatal = 'Codex is not logged in (run `codex login` once)';
+          if (isUsageLimit(text)) limited = String(m.message ?? m.error?.message ?? text);
+          else if (AUTH_ERROR.test(text)) fatal = 'Codex is not logged in (run `codex login` once)';
           if (/model.*(not (found|supported|exist))|unknown model|does not exist/i.test(text)) {
             fatal = `Codex rejected the model "${ctx.spec.model}". Check the exact model name (codex -m ...)`;
           }
@@ -143,6 +147,7 @@ export const codexAdapter: Adapter = {
     });
     usage.durationMs = Date.now() - started;
     syncLoginBack(home);
-    return { exitCode: code, sessionId: sid, usage, fatal };
+    if (limited) fatal = undefined;
+    return { exitCode: code, sessionId: sid, usage, fatal, limited };
   },
 };

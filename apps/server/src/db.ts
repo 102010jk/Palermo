@@ -172,6 +172,12 @@ export class Db {
     return r ? toAccount(r) : null;
   }
 
+  /** The bearer token of an account (used to put an AI player back into its seat after a restart). */
+  tokenOf(id: string): string | null {
+    const r = this.sql.prepare('SELECT token FROM accounts WHERE id = ?').get(id) as Row | undefined;
+    return r ? (r.token as string) : null;
+  }
+
   accountById(id: string): Account | null {
     const r = this.sql.prepare('SELECT * FROM accounts WHERE id = ?').get(id) as Row | undefined;
     return r ? toAccount(r) : null;

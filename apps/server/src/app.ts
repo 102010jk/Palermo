@@ -41,7 +41,9 @@ export function createPalermo(cfg: AppConfig): PalermoApp {
   const db = new Db(cfg.dataPath);
   const auth = new Auth(db, cfg.adminToken, cfg.googleClientId);
   const manager = new GameManager(db, cfg.manager);
-  const pool = new AgentPool(manager, auth, cfg.dataPath === ':memory:' ? null : join(dirname(cfg.dataPath), 'ai-pool.json'));
+  const pool = new AgentPool(manager, auth, cfg.dataPath === ':memory:' ? null : join(dirname(cfg.dataPath), 'ai-pool.json'), (id) => db.tokenOf(id));
+  const poolWatch = setInterval(() => pool.watch(), 10_000);
+  poolWatch.unref();
   const app = express();
   app.disable('x-powered-by');
   app.use(express.json({ limit: '1mb' }));
@@ -220,6 +222,7 @@ export function createPalermo(cfg: AppConfig): PalermoApp {
       startedAt: row.started_at,
       endedAt: row.ended_at,
       round: live.round || null,
+      paused: !!live.pausedAt,
       aborted: !!live.aborted,
       players: live.players.map((p) => {
         // Anonymous games must not reveal who is behind a seat while they run.
@@ -312,6 +315,23 @@ export function createPalermo(cfg: AppConfig): PalermoApp {
   app.post('/api/games/:id/abort', adminAction((id) => void manager.apply(id, (g) => g.abort())));
   app.post('/api/games/:id/pause', adminAction((id, b) => void manager.apply(id, (g) => g.pause(String(b.reason ?? 'paused by the host').slice(0, 200)))));
   app.post('/api/games/:id/resume', adminAction((id) => void manager.apply(id, (g) => g.resume())));
+  // A runner's agent ran out of usage: pause until that player is back (it checks in with its next MCP call).
+  app.post(
+    '/api/admin/games/:id/pause-for',
+    adminAction((id, b) => void manager.apply(id, (g) => g.pause(String(b.reason ?? 'a player is away').slice(0, 200), String(b.accountId ?? '')))),
+  );
+  // Seats of AI players with their tokens, so a restarted runner can sit them down again.
+  app.get(
+    '/api/admin/games/:id/seats',
+    wrap((req) => {
+      requireAdmin(req);
+      const game = manager.get(String(req.params.id));
+      if (!game) throw new HttpError(404, 'Unknown game.');
+      return game.state.players
+        .filter((p) => p.kind === 'ai' && p.accountId)
+        .map((p) => ({ name: p.name, accountId: p.accountId, token: db.tokenOf(p.accountId!), provider: p.provider, model: p.model, alive: p.alive }));
+    }),
+  );
   app.post('/api/games/:id/bots', adminAction((id, b) => {
     const n = Math.min(20, Math.max(1, Number(b.count ?? 1)));
     const ids: string[] = [];
@@ -446,6 +466,7 @@ export function createPalermo(cfg: AppConfig): PalermoApp {
     auth,
     pool,
     close: async () => {
+      clearInterval(poolWatch);
       manager.close();
       io.close();
       await new Promise<void>((r) => http.close(() => r()));

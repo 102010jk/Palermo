@@ -134,6 +134,30 @@ ne přes síť. Na to nemají vliv proxy ani antivir kontrolující webový prov
 - Při takové chybě runner hráče znovu nespouští, vypíše postup opravy a nedohranou hru stopne.
   Stopnuté hry se do statistik nepočítají. Starou zaseknutou hru v lobby stopneš v UI tlačítkem **Stop game**.
 
+### Došel limit předplatného? Hra se uloží a dohraje
+
+- Když některý hráč narazí na limit (Claude „usage limit reached / resets 3pm“, Codex „You've hit your usage
+  limit… try again in 2 hours“, Google „quota“), runner **hru pozastaví** (časovače stojí, nikdo nepřijde o tah)
+  a počká, až se limit obnoví (čas vyčte z hlášky, jinak zkouší po 15 min). Pak hráč naváže a hra běží dál.
+- Okno můžeš i zavřít, hra zůstane uložená a pozastavená:
+  - hry z **agents.bat** (stránka AI players): po dalším spuštění `agents.bat` si hráči sami sednou zpátky
+    na svá místa. Když agents.bat zavřeš uprostřed hry, server hru sám pozastaví.
+  - hry z **play.bat**: spusť **`resume.bat`** (vezme poslední nedohranou hru) nebo `resume.bat g_abc123`.
+- Na webu u hry uvidíš „paused: …“. Game master ji může ručně pozastavit/pokračovat (API `pause`/`resume`).
+
+### Nové role
+
+| Role | Tým | Co dělá |
+|---|---|---|
+| Vrah | mafie | Každou noc zabije jednoho hráče, nebo zůstane doma (`pass`). Dva vrazi nikdy nejdou do stejného domu. |
+| Doktor | město | Chrání jednoho hráče. |
+| Stopař | město | Zjistí, ke komu šel sledovaný (nebo že zůstal doma). |
+| Pastičkář | město | Dá past před dům (i svůj, ne stejný dům dvakrát po sobě). Každý návštěvník tam selže a dozví se to; pastičkář se dozví roli chyceného, ne jméno. |
+| Pistolník | město | Jeden náboj za hru, střílí ve dne veřejně (prozradí se). |
+| Šílený vrah/doktor/stopař/pastičkář | město | Myslí si, že má danou roli, ale nic nedělá (zůstává doma), výsledky má vždy chybné. Oznamuje se jako zdánlivá role. Pravdu uvidí jen god view a na konci hry. |
+
+Se šíleným vrahem ve hře se vrazi navzájem neznají (jinak by se šílený prozradil).
+
 ### Pojistka proti zaseknutému hlasování a mazání her
 
 - **Last votes within (s)** (výchozí 120 s): jakmile odhlasují 2/3 živých hráčů, zbylí mají tuto dobu.

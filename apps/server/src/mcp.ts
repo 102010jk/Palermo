@@ -61,6 +61,8 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
     if (!game) throw new GameError(gameId ? `Unknown game "${gameId}".` : 'You are not in a game. Use list_games and join_game.');
     const playerId = game.state.players.find((p) => p.accountId === account.id)?.id;
     if (!playerId) throw new GameError(`You are not seated in game ${game.state.id}. Use join_game first.`);
+    // The game may be paused waiting for this player (e.g. its usage limit ran out): it is back now.
+    if (game.state.pausedBy?.includes(account.id)) manager.apply(game.state.id, (g) => g.checkIn(account.id));
     return { game, playerId };
   };
 

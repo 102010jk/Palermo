@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { localPipeFor } from '../pipe.ts';
 import { runProcess, short, tryJson } from '../proc.ts';
+import { isUsageLimit } from '../limits.ts';
 import type { Adapter, AgentContext, Launch, RunResult, Usage } from '../types.ts';
 
 const BRIDGE = join(dirname(fileURLToPath(import.meta.url)), '..', 'mcp-bridge.mjs');
@@ -150,6 +151,7 @@ async function runOnce(ctx: AgentContext, launch: Launch, cmd: string, modelArgs
   let deniedTool: string | undefined;
   let modelError = false;
   let spawnFailed = false;
+  let limited: string | undefined;
   let kill: (() => void) | undefined;
   let exitTimer: NodeJS.Timeout | undefined;
   const seenTools = new Set<number>();
@@ -158,7 +160,8 @@ async function runOnce(ctx: AgentContext, launch: Launch, cmd: string, modelArgs
     said = '';
   };
   const checkError = (text: string) => {
-    if (AUTH_ERROR.test(text)) fatal = 'agy is not signed in (run `agy` once and sign in with Google)';
+    if (isUsageLimit(text)) limited = text.trim();
+    else if (AUTH_ERROR.test(text)) fatal = 'agy is not signed in (run `agy` once and sign in with Google)';
     else if (MODEL_ERROR.test(text)) modelError = true;
   };
 
@@ -244,5 +247,6 @@ async function runOnce(ctx: AgentContext, launch: Launch, cmd: string, modelArgs
     fatal = `agy did not load the palermo MCP server from ${join(ctx.workdir, '.agents', 'mcp_config.json')} (see bridge.log next to it)`;
   }
   if (!fatal && spawnFailed) fatal = `agy could not be started ("${cmd}") – is the Antigravity CLI installed and on PATH?`;
-  return { exitCode: code, sessionId: sid, usage, fatal, modelError: !fatal && modelError && palermoCalls === 0 };
+  if (limited) fatal = undefined;
+  return { exitCode: code, sessionId: sid, usage, fatal, limited, modelError: !limited && !fatal && modelError && palermoCalls === 0 };
 }

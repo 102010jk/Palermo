@@ -296,17 +296,31 @@ export class Game {
 
   // ---------------------------------------------------------------- pause
 
-  /** Freeze the game (e.g. a usage limit ran out): deadlines stop until resume(). */
-  pause(reason: string): GameEvent[] {
+  /**
+   * Freeze the game (e.g. a usage limit ran out): deadlines stop until resume(). With `by` (an account id) the game
+   * waits for that player: it resumes on its own once everyone it waits for checked in again.
+   */
+  pause(reason: string, by?: string): GameEvent[] {
     const s = this.state;
-    if (s.phase === 'lobby' || s.phase === 'ended' || s.pausedAt) return [];
+    if (s.phase === 'lobby' || s.phase === 'ended') return [];
+    if (by) s.pausedBy = [...new Set([...(s.pausedBy ?? []), by])];
+    if (s.pausedAt) return [];
     s.pausedAt = this.now();
     s.pauseReason = reason;
     return [this.emit('notice', { scope: 'public' }, `The game is paused: ${reason}. It continues when everyone is back.`, { kind: 'paused', reason })];
   }
 
+  /** A player the game waits for is back; resumes when nobody is missing any more. */
+  checkIn(by: string): GameEvent[] {
+    const s = this.state;
+    if (!s.pausedBy?.includes(by)) return [];
+    s.pausedBy = s.pausedBy.filter((x) => x !== by);
+    return s.pausedBy.length ? [] : this.resume();
+  }
+
   resume(): GameEvent[] {
     const s = this.state;
+    s.pausedBy = [];
     if (!s.pausedAt) return [];
     const d = this.now() - s.pausedAt;
     if (s.phaseEndsAt) s.phaseEndsAt += d;

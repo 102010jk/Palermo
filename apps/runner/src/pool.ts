@@ -20,6 +20,8 @@ interface Assignment {
   name: string;
   provider: AgentProvider;
   model: string;
+  /** Back into a seat it already has (after a restart). */
+  resume?: boolean;
 }
 
 const CLI: Partial<Record<AgentProvider, string>> = { claude: 'claude', codex: 'codex', agy: 'agy', gemini: 'gemini' };
@@ -118,7 +120,7 @@ export async function runPool(cfg: RunnerConfig, api: Api, skill: string, root: 
   }
 
   async function play(a: Assignment, i: number, signal: AbortSignal): Promise<void> {
-    console.log(`→ ${a.name} (${a.provider} ${a.model}) joins ${a.gameId}`);
+    console.log(a.resume ? `↻ ${a.name} (${a.provider} ${a.model}) goes back to its seat in ${a.gameId}` : `→ ${a.name} (${a.provider} ${a.model}) joins ${a.gameId}`);
     const game = await api.game(a.gameId).catch(() => null);
     const spec: AgentSpec = { name: a.name, provider: a.provider, model: a.model, maxRestarts: a.provider === 'agy' ? 6 : 3 };
     const runDir = resolve(cfg.runDir ?? join(tmpdir(), 'palermo-runs'), a.gameId);
@@ -137,6 +139,7 @@ export async function runPool(cfg: RunnerConfig, api: Api, skill: string, root: 
         freedomMode: game?.view?.settings?.freedomMode === true,
         color: COLORS[i % COLORS.length],
         signal,
+        resuming: a.resume,
       });
     } catch (e) {
       error = (e as Error).message;

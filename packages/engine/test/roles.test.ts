@@ -166,4 +166,14 @@ describe('role counts and pause', () => {
     expect(g.state.phase).toBe('day');
     expect(one('murderer').alive).toBe(true);
   });
+
+  it('a pause for players resumes once all of them checked in', () => {
+    const { g } = setup(['murderer', 'doctor', 'civilian', 'civilian'], { nightTimeoutSec: 60 });
+    g.pause('usage limit', 'acc1');
+    g.pause('usage limit', 'acc2');
+    expect(g.checkIn('acc1')).toEqual([]);
+    expect(g.state.pausedAt).toBeTruthy();
+    g.checkIn('acc2');
+    expect(g.state.pausedAt).toBeNull();
+  });
 });

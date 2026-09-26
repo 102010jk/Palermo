@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { localPipeFor } from '../pipe.ts';
 import { runProcess, short, tryJson } from '../proc.ts';
+import { isUsageLimit } from '../limits.ts';
 import type { Adapter, AgentContext, Launch, RunResult, Usage } from '../types.ts';
 
 const BRIDGE = join(dirname(fileURLToPath(import.meta.url)), '..', 'mcp-bridge.mjs');
@@ -66,6 +67,7 @@ export const geminiAdapter: Adapter = {
 
     const usage: Usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null, durationMs: null };
     let fatal: string | undefined;
+    let limited: string | undefined;
     let sid: string | undefined;
     let said = '';
     const flush = () => {
@@ -108,7 +110,8 @@ export const geminiAdapter: Adapter = {
           if (m.status === 'error') {
             const text = JSON.stringify(m.error ?? {});
             ctx.log(`result: error ${short(text, 300)}`);
-            if (AUTH_ERROR.test(text)) fatal = `Gemini CLI cannot use the model: ${short(text, 160)} (run \`gemini\` once and sign in)`;
+            if (isUsageLimit(text)) limited = text;
+            else if (AUTH_ERROR.test(text)) fatal = `Gemini CLI cannot use the model: ${short(text, 160)} (run \`gemini\` once and sign in)`;
             else if (/model/i.test(text) && /not found|not supported|invalid/i.test(text)) {
               fatal = `Gemini rejected the model "${ctx.spec.model}". Check the exact model name (gemini -m ...)`;
             }
@@ -118,6 +121,7 @@ export const geminiAdapter: Adapter = {
     });
     flush();
     usage.durationMs = Date.now() - started;
-    return { exitCode: code, sessionId: sid, usage, fatal };
+    if (limited) fatal = undefined;
+    return { exitCode: code, sessionId: sid, usage, fatal, limited };
   },
 };

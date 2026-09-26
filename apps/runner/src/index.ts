@@ -1,11 +1,13 @@
 #!/usr/bin/env -S npx tsx
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { Api } from './api.ts';
 import { doctor } from './doctor.ts';
+import { limitResetDelay } from './limits.ts';
+import { short } from './proc.ts';
 import { runPool } from './pool.ts';
 import { botAdapter } from './adapters/bot.ts';
 import { claudeAdapter } from './adapters/claude.ts';
@@ -49,6 +51,17 @@ const ADAPTERS: Record<AgentSpec['provider'], Adapter> = {
 const COLORS = [36, 33, 35, 32, 34, 91, 92, 93, 94, 95, 96];
 
 /** Returns a fatal error message if the agent could not play at all. */
+/** Sleep that ends early when the agent is stopped. */
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const t = setTimeout(resolve, ms);
+    signal?.addEventListener('abort', () => {
+      clearTimeout(t);
+      resolve();
+    }, { once: true });
+  });
+}
+
 async function runAgent(ctx: AgentContext, adapter: Adapter): Promise<string | undefined> {
   const maxRestarts = ctx.spec.maxRestarts ?? 5;
   let resumeId: string | undefined;
@@ -56,7 +69,7 @@ async function runAgent(ctx: AgentContext, adapter: Adapter): Promise<string | u
   for (let attempt = 0; attempt <= maxRestarts; attempt++) {
     if (ctx.signal?.aborted) break;
     let prompt = startPrompt(ctx);
-    if (attempt > 0) {
+    if (attempt > 0 || ctx.resuming) {
       const state = await ctx.api.game(ctx.gameId, ctx.token).catch(() => null);
       const ended = state?.view?.phase === 'ended';
       const me = state?.view?.you?.id;
@@ -64,7 +77,11 @@ async function runAgent(ctx: AgentContext, adapter: Adapter): Promise<string | u
       if (ended && reported) break;
       if (ended) prompt = reportPrompt(ctx);
       else if (me) prompt = continuePrompt(ctx);
-      ctx.log(`relaunching (attempt ${attempt}) – ${ended ? 'writing report' : me ? 'game still running' : 'not seated yet'}`);
+      ctx.log(
+        attempt === 0
+          ? `back to its seat – ${ended ? 'writing report' : 'game still running'}`
+          : `relaunching (attempt ${attempt}) – ${ended ? 'writing report' : me ? 'game still running' : 'not seated yet'}`,
+      );
     }
     const res = await adapter.run(ctx, { attempt, prompt, resumeId });
     resumeId = res.sessionId ?? resumeId;
@@ -75,6 +92,22 @@ async function runAgent(ctx: AgentContext, adapter: Adapter): Promise<string | u
       if (blockedRuns >= 3) {
         return `${ctx.spec.name}: the safety filter of ${ctx.spec.model ?? 'the model'} keeps refusing the game (${res.blocked})`;
       }
+    }
+    if (res.limited) {
+      // Out of usage: pause the game for this player and wait until the limit resets. Not counted as a restart.
+      const waitMs = limitResetDelay(res.limited);
+      const until = new Date(Date.now() + waitMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      ctx.log(`⏸ usage limit reached (${short(res.limited, 120)}). The game pauses; trying again at ${until}.`);
+      ctx.log('   You can also close the window: the game stays saved and paused, restart agents.bat later to finish it.');
+      if (ctx.accountId) {
+        await ctx.api
+          .req('POST', `/api/admin/games/${ctx.gameId}/pause-for`, { accountId: ctx.accountId, reason: `${ctx.spec.name} is out of usage until about ${until}` })
+          .catch(() => {});
+      }
+      await sleep(waitMs, ctx.signal);
+      ctx.resuming = true;
+      attempt--;
+      continue;
     }
     if (res.usage) {
       await ctx.api
@@ -110,11 +143,39 @@ export interface LaunchOptions {
   freedomMode: boolean;
   color: number;
   signal?: AbortSignal;
+  /** Back into an existing seat (restart): continue instead of joining. */
+  resuming?: boolean;
 }
 
 /** Plays one agent through one game (with relaunches). Returns a fatal error message if it could not play. */
+/** How each player of a game was started (CLI, model, extra args), kept next to the logs so --resume can repeat it. */
+function rememberLaunch(runDir: string, spec: AgentSpec): void {
+  const file = join(runDir, 'launch.json');
+  let all: Record<string, AgentSpec> = {};
+  try {
+    if (existsSync(file)) all = JSON.parse(readFileSync(file, 'utf8'));
+  } catch {
+    all = {};
+  }
+  all[spec.name] = spec;
+  try {
+    writeFileSync(file, JSON.stringify(all, null, 2));
+  } catch {
+    // not essential
+  }
+}
+
+function launchedSpecs(runDir: string): Record<string, AgentSpec> {
+  try {
+    return JSON.parse(readFileSync(join(runDir, 'launch.json'), 'utf8'));
+  } catch {
+    return {};
+  }
+}
+
 export async function launchAgent(o: LaunchOptions): Promise<string | undefined> {
   const { spec, api } = o;
+  rememberLaunch(o.runDir, spec);
   const workdir = join(o.runDir, spec.name.replace(/[^\w.-]/g, '_'));
   mkdirSync(workdir, { recursive: true });
   const logFile = join(workdir, 'agent.log');
@@ -128,6 +189,8 @@ export async function launchAgent(o: LaunchOptions): Promise<string | undefined>
     freedomMode: o.freedomMode,
     skill: o.skill,
     signal: o.signal,
+    accountId: o.accountId,
+    resuming: o.resuming,
     api,
     reportModel: (model) => {
       if (model === spec.model) return;
@@ -197,6 +260,69 @@ async function playOneGame(cfg: RunnerConfig, api: Api, skill: string, gameNo: n
   return gameId;
 }
 
+const CLI_OF: Record<string, AgentSpec['provider']> = { anthropic: 'claude', openai: 'codex', google: 'agy', script: 'bot' };
+
+/**
+ * `--resume <gameId|latest>`: sit the AI players of an unfinished game back into their seats (after a usage limit,
+ * a closed window or a restart) and play it to the end. Players are matched to the config by name; players missing
+ * from the config are started from their seat's provider and model.
+ */
+async function resumeGame(cfg: RunnerConfig, api: Api, skill: string, which: string): Promise<void> {
+  type Seat = { name: string; accountId: string; token: string; provider?: string; model?: string; alive: boolean };
+  let gameId = which;
+  let seats: Seat[] = [];
+  if (which === 'latest') {
+    const games = ((await api.req('GET', '/api/games')) as { id: string; phase: string; aborted?: boolean }[]).filter(
+      (g) => g.phase === 'night' || g.phase === 'day',
+    );
+    for (const g of games) {
+      const s = (await api.req('GET', `/api/admin/games/${g.id}/seats`).catch(() => [])) as Seat[];
+      if (s.length) {
+        gameId = g.id;
+        seats = s;
+        break;
+      }
+    }
+    if (!seats.length) {
+      console.log('No unfinished game with AI players found. Nothing to resume.');
+      return;
+    }
+  } else {
+    seats = (await api.req('GET', `/api/admin/games/${gameId}/seats`)) as Seat[];
+  }
+  console.log(`Resuming game ${gameId} → ${cfg.server.replace(/\/$/, '')}/game/${gameId}`);
+  const game = await api.game(gameId);
+  const runDir = resolve(cfg.runDir ?? join(tmpdir(), 'palermo-runs'), gameId);
+  mkdirSync(runDir, { recursive: true });
+  const launched = launchedSpecs(runDir);
+  const jobs = seats.map((seat, i) => {
+    const fromConfig = launched[seat.name] ?? cfg.agents.find((a) => a.name === seat.name);
+    const provider = fromConfig?.provider ?? CLI_OF[seat.provider ?? ''];
+    if (!provider) {
+      console.log(`${seat.name}: unknown provider "${seat.provider}", add it to the config (same name) to resume it.`);
+      return Promise.resolve(undefined);
+    }
+    const spec: AgentSpec = fromConfig ?? { name: seat.name, provider, model: seat.model, maxRestarts: provider === 'agy' ? 6 : 3 };
+    return launchAgent({
+      cfg,
+      api,
+      skill,
+      spec,
+      gameId,
+      token: seat.token,
+      accountId: seat.accountId,
+      runDir,
+      freedomMode: game?.view?.settings?.freedomMode === true,
+      color: COLORS[i % COLORS.length],
+      resuming: true,
+    });
+  });
+  const fatals = (await Promise.all(jobs)).filter((x): x is string => !!x);
+  if (fatals.length) printFatalHelp(fatals);
+  const final = await api.game(gameId).catch(() => null);
+  console.log(`\nGame ${gameId}: phase=${final?.view?.phase ?? '?'}, winner=${final?.view?.winner ?? '-'}`);
+}
+
 function printFatalHelp(fatals: string[]) {
   const unique = [...new Set(fatals)];
   console.log('\n\x1b[31mThe agents could not play:\x1b[0m');
@@ -245,6 +371,7 @@ async function main() {
       'create-only': { type: 'boolean' },
       check: { type: 'boolean' },
       pool: { type: 'boolean' },
+      resume: { type: 'string' },
     },
   });
   // npm runs workspace scripts inside apps/runner; resolve paths from where the user invoked npm.
@@ -280,6 +407,10 @@ async function main() {
   const skill = loadSkill(resolve(cfg.skillPath ?? join(root, 'skills/palermo-player/SKILL.md')));
   if (values.pool) {
     await runPool(cfg, api, skill, root);
+    return;
+  }
+  if (values.resume) {
+    await resumeGame(cfg, api, skill, values.resume);
     return;
   }
   const games = Number(values.games ?? cfg.games ?? 1);

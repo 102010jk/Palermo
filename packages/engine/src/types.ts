@@ -181,6 +181,8 @@ export interface GameState {
   /** Game paused (e.g. a provider's usage limit ran out): timers are frozen until it resumes. */
   pausedAt?: number | null;
   pauseReason?: string | null;
+  /** Accounts the game waits for (e.g. out of usage): it resumes once all of them are back. */
+  pausedBy?: string[];
   events: GameEvent[];
   winner: Winner | null;
   /** Stopped by the host (or the runner): not a real result, excluded from statistics. */
