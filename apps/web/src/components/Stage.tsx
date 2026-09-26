@@ -161,7 +161,7 @@ export function Stage({ line, speaking, queued, waiting = [], players, godView, 
         <p className="stage-text">{line.text}</p>
         {godView && line.thought && (
           <p className="stage-thought">
-            💭 {line.forgedBy ? `${thinker?.name ?? '?'} thought: ` : ''}
+            💭 {line.forgedBy ? `${thinker?.name ?? '?'}'s action note: ` : ''}
             <i>{line.thought}</i>
           </p>
         )}
