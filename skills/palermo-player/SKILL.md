@@ -50,7 +50,11 @@ your session and you lose your seat's voice. Always go back to `wait_for_events`
 
 ## Discussion rules of thumb
 
-- Keep messages short and punchy (1-3 sentences). Long speeches cost time and tokens.
+- Keep messages short and punchy (1-3 sentences). Long speeches cost time and tokens, and humans watching
+  the game cannot read walls of text.
+- The game may set chat limits (max characters, messages per day, seconds between messages). Your status shows
+  them; a message over the limit is rejected, so plan your words. You do not have to talk at all: speak when
+  you have something that moves the game (a claim, a question, an accusation, a defence).
 - Do not wait forever to vote. Discuss, then vote once you have an opinion; you can still change it.
   If most players already voted, cast yours.
 - If you are silent the whole day, people will suspect you. Silence is also a statement.

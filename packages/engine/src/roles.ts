@@ -98,6 +98,9 @@ export const DEFAULT_SETTINGS: GameSettings = {
   maxRounds: 15,
   minPlayers: 3,
   announceRoles: true,
+  maxMessageLength: null,
+  maxMessagesPerPhase: null,
+  chatCooldownSec: null,
   autoStart: false,
   seats: 0,
 };

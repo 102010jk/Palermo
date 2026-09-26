@@ -1022,3 +1022,31 @@ button:focus-visible {
     font-size: 1.4rem;
   }
 }
+.chat-limits {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 12px 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+}
+.chat-limits legend {
+  color: var(--muted);
+  font-size: 0.9rem;
+  padding: 0 4px;
+}
+.settings-form .chat-limits label.limit {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+}
+.chat-limits input[type='number'] {
+  width: 80px;
+}
+.chat-quota {
+  align-self: center;
+  font-size: 0.8rem;
+  color: var(--muted);
+  white-space: nowrap;
+}

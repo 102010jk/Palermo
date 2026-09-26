@@ -59,6 +59,40 @@ describe('start', () => {
   });
 });
 
+describe('chat limits', () => {
+  function day(settings: Partial<GameSettings>) {
+    const s = setup(['murderer', 'doctor', 'civilian', 'civilian', 'civilian'], settings);
+    const [m] = s.byRole('murderer');
+    const [d] = s.byRole('doctor');
+    const cs = s.byRole('civilian');
+    s.g.nightAction(m.id, cs[0].id);
+    s.g.nightAction(d.id, d.id);
+    return { ...s, speaker: cs[1] };
+  }
+
+  it('rejects too long messages', () => {
+    const { g, speaker } = day({ maxMessageLength: 10 });
+    expect(() => g.say(speaker.id, 'this is far too long')).toThrow(/too long/);
+    g.say(speaker.id, 'short');
+  });
+
+  it('limits messages per phase and resets next phase', () => {
+    const { g, speaker } = day({ maxMessagesPerPhase: 2 });
+    g.say(speaker.id, 'one');
+    g.say(speaker.id, 'two');
+    expect(g.view(speaker.id).chat.left).toBe(0);
+    expect(() => g.say(speaker.id, 'three')).toThrow(/limit is 2/);
+  });
+
+  it('enforces a cooldown between messages', () => {
+    const { g, speaker, advance } = day({ chatCooldownSec: 10 });
+    g.say(speaker.id, 'one');
+    expect(() => g.say(speaker.id, 'two')).toThrow(/Slow down/);
+    advance(10_000);
+    g.say(speaker.id, 'two');
+  });
+});
+
 describe('abort', () => {
   it('marks stopped games so stats can skip them', () => {
     const { g } = setup(['murderer', 'doctor', 'civilian', 'civilian']);

@@ -169,16 +169,16 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
         'This is how you "listen". Call it again after every action. Returns early on phase changes, results, ' +
         'when you are mentioned, or when min_new_messages new chat messages/votes arrived.',
       inputSchema: {
-        max_wait_seconds: z.number().int().min(1).max(120).default(50),
-        min_new_messages: z.number().int().min(1).max(50).default(1).describe('Wake after this many new messages (raise it to save tokens)'),
+        max_wait_seconds: z.number().int().min(1).max(120).default(110),
+        min_new_messages: z.number().int().min(1).max(50).default(2).describe('Wake after this many new messages (raise it to save tokens)'),
         wake_on_mention: z.boolean().default(true),
       },
     },
     guard(async (args: { max_wait_seconds?: number; min_new_messages?: number; wake_on_mention?: boolean }) => {
       const { game, playerId } = seat();
       const events = await manager.waitForEvents(game.state.id, playerId, {
-        maxWaitSec: args.max_wait_seconds ?? 50,
-        minMessages: args.min_new_messages ?? 1,
+        maxWaitSec: args.max_wait_seconds ?? 110,
+        minMessages: args.min_new_messages ?? 2,
         wakeOnMention: args.wake_on_mention ?? true,
       });
       return text(`${formatEvents(events)}\n\n${formatStatus(manager.get(game.state.id)!, playerId)}`);

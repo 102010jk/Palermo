@@ -268,6 +268,7 @@ export class Game {
     s.phase = phase;
     s.phaseStartedAt = this.now();
     s.nightChoices = {};
+    s.messagesThisPhase = {};
     s.votes = {};
     const timeout = phase === 'night' ? this.settings.nightTimeoutSec : phase === 'day' ? this.settings.dayTimeoutSec : null;
     s.phaseEndsAt = timeout ? s.phaseStartedAt + timeout * 1000 : null;
@@ -323,19 +324,56 @@ export class Game {
       return [this.emit('chat', { scope: 'public' }, `${p.publicName}: ${text}`, { message: text }, p.id)];
     }
     if (!p.alive) throw new GameError('You are dead. Dead players cannot talk.');
+    if (s.phase === 'night' && p.role !== 'murderer') {
+      throw new GameError('It is night. Only murderers can talk (privately with each other). Wait for the day.');
+    }
+    this.checkChatLimits(p, text);
     const out = this.emitThought(p, thought, 'chat');
     if (s.phase === 'day') {
       out.push(this.emit('chat', { scope: 'public' }, `${p.publicName}: ${text}`, { message: text }, p.id));
       return out;
     }
-    // night
-    if (p.role !== 'murderer') {
-      throw new GameError('It is night. Only murderers can talk (privately with each other). Wait for the day.');
-    }
+    // night: murderers' private chat
     out.push(
       this.emit('team_chat', { scope: 'team', team: 'mafia' }, `[murderers] ${p.publicName}: ${text}`, { message: text }, p.id),
     );
     return out;
+  }
+
+  /** Enforce the game's chat limits and record the message. Throws a GameError the sender can act on. */
+  private checkChatLimits(p: Player, text: string): void {
+    const s = this.state;
+    const cfg = this.settings;
+    if (cfg.maxMessageLength && text.length > cfg.maxMessageLength) {
+      throw new GameError(
+        `Message too long: ${text.length} characters, the limit is ${cfg.maxMessageLength}. Say it shorter.`,
+      );
+    }
+    const sent = s.messagesThisPhase?.[p.id] ?? 0;
+    if (cfg.maxMessagesPerPhase && sent >= cfg.maxMessagesPerPhase) {
+      throw new GameError(
+        `You already sent ${sent} messages this ${s.phase}, the limit is ${cfg.maxMessagesPerPhase}. You can still vote and act.`,
+      );
+    }
+    const last = s.lastMessageAt?.[p.id];
+    if (cfg.chatCooldownSec && last !== undefined) {
+      const wait = Math.ceil((last + cfg.chatCooldownSec * 1000 - this.now()) / 1000);
+      if (wait > 0) throw new GameError(`Slow down: you can send your next message in ${wait} s.`);
+    }
+    s.messagesThisPhase = { ...(s.messagesThisPhase ?? {}), [p.id]: sent + 1 };
+    s.lastMessageAt = { ...(s.lastMessageAt ?? {}), [p.id]: this.now() };
+  }
+
+  /** Remaining chat allowance of a player in the current phase. */
+  chatAllowance(playerId: string): PlayerView['chat'] {
+    const cfg = this.settings;
+    const s = this.state;
+    const last = s.lastMessageAt?.[playerId];
+    return {
+      maxLength: cfg.maxMessageLength,
+      left: cfg.maxMessagesPerPhase ? Math.max(0, cfg.maxMessagesPerPhase - (s.messagesThisPhase?.[playerId] ?? 0)) : null,
+      cooldownUntil: cfg.chatCooldownSec && last !== undefined ? last + cfg.chatCooldownSec * 1000 : null,
+    };
   }
 
   // ---------------------------------------------------------------- night
@@ -735,6 +773,7 @@ export class Game {
       votedCount: Object.keys(s.votes).length,
       aliveCount: this.alive().length,
       required: me ? this.required(me.id) : { kind: 'none', done: true, hint: 'Spectating.' },
+      chat: me ? this.chatAllowance(me.id) : { maxLength: this.settings.maxMessageLength, left: null, cooldownUntil: null },
       lastEventSeq: s.events.length,
     };
   }

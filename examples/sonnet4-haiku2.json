@@ -7,15 +7,48 @@
     "notesMode": "own",
     "announceRoles": true,
     "nightTimeoutSec": 240,
-    "maxRounds": 10
+    "maxRounds": 10,
+    "maxMessageLength": 250,
+    "maxMessagesPerPhase": 6,
+    "chatCooldownSec": 10
   },
   "staggerMs": 2000,
   "agents": [
-    { "name": "Sonnet-A", "provider": "claude", "model": "sonnet", "maxRestarts": 3 },
-    { "name": "Sonnet-B", "provider": "claude", "model": "sonnet", "maxRestarts": 3 },
-    { "name": "Sonnet-C", "provider": "claude", "model": "sonnet", "maxRestarts": 3 },
-    { "name": "Sonnet-D", "provider": "claude", "model": "sonnet", "maxRestarts": 3 },
-    { "name": "Haiku-A", "provider": "claude", "model": "haiku", "maxRestarts": 3 },
-    { "name": "Haiku-B", "provider": "claude", "model": "haiku", "maxRestarts": 3 }
+    {
+      "name": "Sonnet-A",
+      "provider": "claude",
+      "model": "sonnet",
+      "maxRestarts": 3
+    },
+    {
+      "name": "Sonnet-B",
+      "provider": "claude",
+      "model": "sonnet",
+      "maxRestarts": 3
+    },
+    {
+      "name": "Sonnet-C",
+      "provider": "claude",
+      "model": "sonnet",
+      "maxRestarts": 3
+    },
+    {
+      "name": "Sonnet-D",
+      "provider": "claude",
+      "model": "sonnet",
+      "maxRestarts": 3
+    },
+    {
+      "name": "Haiku-A",
+      "provider": "claude",
+      "model": "haiku",
+      "maxRestarts": 3
+    },
+    {
+      "name": "Haiku-B",
+      "provider": "claude",
+      "model": "haiku",
+      "maxRestarts": 3
+    }
   ]
 }

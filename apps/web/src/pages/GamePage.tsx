@@ -174,7 +174,7 @@ export function GamePage({ gameId }: { gameId: string }) {
     if (el && (stick.current || replay)) el.scrollTop = el.scrollHeight;
   }, [events, replay?.idx]);
 
-  const now = useNow(!!view?.phaseEndsAt);
+  const now = useNow(!!view?.phaseEndsAt || !!view?.chat?.cooldownUntil);
   const shownEvents = replay ? events.slice(0, replay.idx) : events;
   const replayState = useMemo(() => (replay ? deriveState(shownEvents) : null), [replay?.idx, events]);
   const phase = replayState?.phase ?? view?.phase ?? 'lobby';
@@ -359,8 +359,21 @@ export function GamePage({ gameId }: { gameId: string }) {
                 input.value = '';
               }}
             >
-              <input name="msg" placeholder={night ? 'Whisper to your fellow murderers…' : 'Say something to the town…'} autoComplete="off" maxLength={2000} />
-              <button type="submit">Send</button>
+              <input
+                name="msg"
+                placeholder={night ? 'Whisper to your fellow murderers…' : 'Say something to the town…'}
+                autoComplete="off"
+                maxLength={view.chat.maxLength ?? 2000}
+              />
+              {view.phase !== 'lobby' && (view.chat.left !== null || (view.chat.cooldownUntil ?? 0) > now) && (
+                <span className="chat-quota">
+                  {view.chat.left !== null ? `${view.chat.left} left` : ''}
+                  {(view.chat.cooldownUntil ?? 0) > now ? ` · wait ${Math.ceil(((view.chat.cooldownUntil ?? 0) - now) / 1000)}s` : ''}
+                </span>
+              )}
+              <button type="submit" disabled={view.phase !== 'lobby' && (view.chat.left === 0 || (view.chat.cooldownUntil ?? 0) > now)}>
+                Send
+              </button>
             </form>
           )}
         </section>

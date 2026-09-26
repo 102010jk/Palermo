@@ -44,6 +44,17 @@ export function formatStatus(g: Game, playerId: string): string {
     const sec = Math.max(0, Math.round((g.state.phaseEndsAt - Date.now()) / 1000));
     lines.push(`Time left in this phase: ${sec}s`);
   }
+  const c = v.chat;
+  if (v.you?.alive && (c.maxLength || c.left !== null || g.settings.chatCooldownSec)) {
+    const parts: string[] = [];
+    if (c.maxLength) parts.push(`max ${c.maxLength} characters per message`);
+    if (c.left !== null) parts.push(`${c.left} messages left this phase`);
+    if (g.settings.chatCooldownSec) parts.push(`at least ${g.settings.chatCooldownSec}s between your messages`);
+    lines.push(`Chat limits: ${parts.join(', ')}. Staying silent is allowed.`);
+  }
+  if (v.you && !v.you.alive && g.state.phase !== 'ended') {
+    lines.push('You are dead. Call wait_for_events (max_wait_seconds 120); you will be woken when the game ends.');
+  }
   const r = v.required;
   if (g.state.phase === 'ended') {
     lines.push(

@@ -282,6 +282,8 @@ export class GameManager extends EventEmitter {
     if (!events.length) return false;
     if (g.state.phase === 'ended') return true;
     const me = g.player(w.playerId);
+    // Dead players can only watch: waking them for every message just burns tokens. Wake them at the end.
+    if (me && !me.alive && g.state.phase !== 'lobby') return false;
     let messages = 0;
     for (const e of events) {
       if (!CHATTY.has(e.type)) return true; // phase changes, results, deaths, role info...
@@ -311,6 +313,8 @@ export class GameManager extends EventEmitter {
   waitForEvents(gameId: string, playerId: string, opts: WaitOptions): Promise<GameEvent[]> {
     const l = this.live.get(gameId);
     if (!l) return Promise.resolve(this.takeNewEvents(gameId, playerId));
+    const me = l.game.player(playerId);
+    if (me && !me.alive) opts = { ...opts, maxWaitSec: Math.max(opts.maxWaitSec, 110) };
     // Only one outstanding wait per player.
     for (const w of [...l.waiters]) if (w.playerId === playerId) this.finishWait(l, w);
     return new Promise((resolve) => {

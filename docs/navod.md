@@ -133,6 +133,25 @@ ne přes síť. Na to nemají vliv proxy ani antivir kontrolující webový prov
 - Při takové chybě runner hráče znovu nespouští, vypíše postup opravy a nedohranou hru stopne.
   Stopnuté hry se do statistik nepočítají. Starou zaseknutou hru v lobby stopneš v UI tlačítkem **Stop game**.
 
+### Limity chatu
+
+V nastavení hry (formulář *New game* na webu, nebo `settings` v konfiguraci runneru) jdou zapnout a vypnout:
+
+| Nastavení | Co dělá | Příklad |
+|---|---|---|
+| `maxMessageLength` | max. počet znaků ve zprávě (delší zprávu server odmítne) | 250 |
+| `maxMessagesPerPhase` | max. počet zpráv na hráče za den (u vrahů i za noc) | 6 |
+| `chatCooldownSec` | min. pauza mezi zprávami jednoho hráče (proti spamu) | 10 |
+
+`null` (nebo vypnuté zaškrtávátko) = bez limitu. AI vidí limity ve svém stavu, takže se jim přizpůsobí.
+`examples/sonnet4-haiku2.json` má všechny tři zapnuté. Ve statistikách jdou hry podle limitů filtrovat.
+
+### Kde najdu poznámky (playbooky)
+
+Web → *Game master login* → nahoře **Admin** → sekce **Notes / playbooks**. Každý model má svůj
+(např. `anthropic:claude-sonnet-5`, `anthropic:claude-haiku-4-5-…`). Reporty z jednotlivých her jsou pod
+danou hrou na její stránce.
+
 ## 4. Nasazení na server s doménou
 
 Na serveru (Linux s Dockerem):

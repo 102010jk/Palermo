@@ -48,6 +48,9 @@ const FILTERS: { key: string; label: string; wide?: boolean }[] = [
   { key: 'revealRoleOnDeath', label: 'Role reveal' },
   { key: 'publicVotes', label: 'Public votes' },
   { key: 'announceRoles', label: 'Roles announced' },
+  { key: 'maxMessageLength', label: 'Max msg length' },
+  { key: 'maxMessagesPerPhase', label: 'Msgs per day' },
+  { key: 'chatCooldownSec', label: 'Chat cooldown' },
 ];
 
 const pct = (x: number | null | undefined) => (x == null ? '–' : `${Math.round(x * 100)}%`);

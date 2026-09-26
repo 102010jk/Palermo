@@ -39,6 +39,12 @@ export interface GameSettings {
   minPlayers: number;
   /** Tell everyone at the start how many of each role are in play. */
   announceRoles: boolean;
+  /** Chat limits (null = off). Max characters per message. */
+  maxMessageLength: number | null;
+  /** Max chat messages per player per phase (a day, or a night for the murderers' private chat). */
+  maxMessagesPerPhase: number | null;
+  /** Minimum seconds between two messages of the same player (anti-spam). */
+  chatCooldownSec: number | null;
   /** Server starts the game automatically once enough players joined and everyone is ready. */
   autoStart: boolean;
   /** Target seat count used together with autoStart (0 = any count >= minPlayers). */
@@ -126,6 +132,10 @@ export interface GameState {
   nightChoices: Record<string, NightChoice>;
   /** playerId -> target playerId or 'skip' for the current day. */
   votes: Record<string, string>;
+  /** playerId -> chat messages sent in the current phase (for chat limits). */
+  messagesThisPhase?: Record<string, number>;
+  /** playerId -> time of the last chat message (for the cooldown). */
+  lastMessageAt?: Record<string, number>;
   /** doctorId -> last protected playerId. */
   lastProtected: Record<string, string>;
   /** doctorIds that already used their one self-protect. */
@@ -188,5 +198,7 @@ export interface PlayerView {
   votedCount: number;
   aliveCount: number;
   required: RequiredAction;
+  /** Chat limits for the viewer: null fields mean "no limit". */
+  chat: { maxLength: number | null; left: number | null; cooldownUntil: number | null };
   lastEventSeq: number;
 }

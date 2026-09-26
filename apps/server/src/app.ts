@@ -409,7 +409,7 @@ export class HttpError extends Error {
 }
 
 const BOOL_KEYS = ['revealRoleOnDeath', 'publicVotes', 'allowSkipVote', 'freedomMode', 'doctorNoRepeat', 'doctorLearnsSave', 'autoStart', 'announceRoles'] as const;
-const NUM_OR_NULL = ['nightTimeoutSec', 'dayTimeoutSec', 'maxRounds'] as const;
+const NUM_OR_NULL = ['nightTimeoutSec', 'dayTimeoutSec', 'maxRounds', 'maxMessageLength', 'maxMessagesPerPhase', 'chatCooldownSec'] as const;
 
 /** Accept only known settings with sane types from the admin UI / runner. */
 export function sanitizeSettings(input: Record<string, unknown>): Partial<GameSettings> {

@@ -19,6 +19,12 @@ export function CreateGameForm({ onCreated }: { onCreated: (id: string) => void 
     nightTimeoutSec: '180',
     dayTimeoutSec: '',
     maxRounds: '15',
+    limitLength: true,
+    maxMessageLength: '250',
+    limitCount: true,
+    maxMessagesPerPhase: '6',
+    limitCooldown: true,
+    chatCooldownSec: '10',
     customRoles: '',
   });
   const [error, setError] = useState<string | null>(null);
@@ -46,6 +52,9 @@ export function CreateGameForm({ onCreated }: { onCreated: (id: string) => void 
         nightTimeoutSec: s.nightTimeoutSec ? Number(s.nightTimeoutSec) : null,
         dayTimeoutSec: s.dayTimeoutSec ? Number(s.dayTimeoutSec) : null,
         maxRounds: s.maxRounds ? Number(s.maxRounds) : null,
+        maxMessageLength: s.limitLength && s.maxMessageLength ? Number(s.maxMessageLength) : null,
+        maxMessagesPerPhase: s.limitCount && s.maxMessagesPerPhase ? Number(s.maxMessagesPerPhase) : null,
+        chatCooldownSec: s.limitCooldown && s.chatCooldownSec ? Number(s.chatCooldownSec) : null,
         roles,
       };
       const g = await api('POST', '/api/games', { settings }, { admin: true });
@@ -105,6 +114,22 @@ export function CreateGameForm({ onCreated }: { onCreated: (id: string) => void 
         Max rounds
         <input type="number" placeholder="unlimited" value={s.maxRounds} onChange={(e) => set('maxRounds', e.target.value)} />
       </label>
+      <fieldset className="wide chat-limits">
+        <legend>Chat limits (turn each on or off)</legend>
+        {(
+          [
+            ['limitLength', 'maxMessageLength', 'Max characters per message'],
+            ['limitCount', 'maxMessagesPerPhase', 'Max messages per player per day'],
+            ['limitCooldown', 'chatCooldownSec', 'Seconds between a player\'s messages'],
+          ] as const
+        ).map(([flag, key, label]) => (
+          <label key={key} className="limit">
+            <input type="checkbox" checked={s[flag] as boolean} onChange={(e) => set(flag, e.target.checked)} />
+            <span>{label}</span>
+            <input type="number" min={1} value={s[key] as string} disabled={!s[flag]} onChange={(e) => set(key, e.target.value)} />
+          </label>
+        ))}
+      </fieldset>
       <label className="wide">
         Custom roles (optional)
         <input
