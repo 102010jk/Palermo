@@ -6,6 +6,7 @@ interface Bucket {
   key: string;
   label: string;
   games: number;
+  distinctGames: number;
   wins: number;
   losses: number;
   draws: number;
@@ -172,7 +173,7 @@ function Panel({ title, colorIndexByKey }: { title?: string; colorIndexByKey: (k
                 <BarChart data={barData} layout="vertical" margin={{ left: 12, right: 24 }} barGap={2}>
                   <CartesianGrid horizontal={false} stroke="var(--grid)" />
                   <XAxis type="number" domain={[0, 100]} tick={{ fill: 'var(--muted)', fontSize: 12 }} stroke="var(--grid)" />
-                  <YAxis type="category" dataKey="name" width={130} tick={{ fill: 'var(--text)', fontSize: 12 }} stroke="var(--grid)" />
+                  <YAxis type="category" dataKey="name" width={160} tick={{ fill: 'var(--text)', fontSize: 12 }} stroke="var(--grid)" />
                   <Tooltip
                     cursor={{ fill: 'rgba(255,255,255,0.04)' }}
                     contentStyle={{ background: 'var(--card-2)', border: '1px solid var(--line)', color: 'var(--text)' }}
@@ -223,7 +224,8 @@ function Panel({ title, colorIndexByKey }: { title?: string; colorIndexByKey: (k
                 <thead>
                   <tr>
                     <th>Player / model</th>
-                    <th>Games</th>
+                    <th title="Games the model took part in">Games</th>
+                    <th title="Seats played: 4 Sonnets in one game count as 4">Seats</th>
                     <th>Win rate</th>
                     <th>As town</th>
                     <th>As murderer</th>
@@ -239,6 +241,7 @@ function Panel({ title, colorIndexByKey }: { title?: string; colorIndexByKey: (k
                   {models.map((b) => (
                     <tr key={b.key}>
                       <td>{b.label}</td>
+                      <td>{b.distinctGames}</td>
                       <td>{b.games}</td>
                       <td>{pct(b.winRate)}</td>
                       <td>{rateText(b, false)}</td>

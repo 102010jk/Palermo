@@ -18,6 +18,8 @@ export interface Bucket {
   key: string;
   label: string;
   games: number;
+  /** Distinct games this model took part in (games counts seats: 4 Sonnets in one game = 4). */
+  distinctGames: number;
   wins: number;
   losses: number;
   draws: number;
@@ -50,10 +52,16 @@ export interface StatsResult {
 
 type Row = Record<string, unknown>;
 
+/** Scripted players: server-side bots and the runner's MCP bots (provider "script"). */
+export function isBot(p: { kind: string; provider: string | null; model?: string | null }): boolean {
+  return p.kind === 'bot' || p.provider === 'script' || p.model === 'random-bot';
+}
+
 export function modelLabel(p: { kind: string; provider: string | null; model: string | null; name: string; account_id?: string | null }): { key: string; label: string } {
   if (p.kind === 'human') return { key: `human:${p.account_id ?? p.name}`, label: `${p.name} (human)` };
-  if (p.kind === 'bot') return { key: 'bot', label: 'Scripted bot' };
-  if (p.model) return { key: `${p.provider ?? '?'}:${p.model}`, label: p.model };
+  if (isBot(p)) return { key: 'bot', label: 'Scripted bot' };
+  // Drop date stamps from labels: "claude-haiku-4-5-20251001" -> "claude-haiku-4-5".
+  if (p.model) return { key: `${p.provider ?? '?'}:${p.model}`, label: p.model.replace(/-\d{8}$/, '') };
   return { key: `agent:${p.name}`, label: `${p.name} (unknown model)` };
 }
 
@@ -98,8 +106,11 @@ function matches(settings: GameSettings, row: Row, f: StatsFilter, derived: Reco
 export function computeStats(db: Db, filter: StatsFilter = { settings: {} }): StatsResult {
   const playersStmt = db.sql.prepare('SELECT * FROM game_players WHERE game_id = ?');
   // Games stopped by the host are not results.
+  // Not results: games stopped by the host, and test games where only scripted bots played.
   const allEnded = (db.sql.prepare("SELECT * FROM games WHERE phase = 'ended' ORDER BY ended_at").all() as Row[]).filter(
-    (g) => !(JSON.parse(g.state as string) as { aborted?: boolean }).aborted,
+    (g) =>
+      !(JSON.parse(g.state as string) as { aborted?: boolean }).aborted &&
+      (playersStmt.all(g.id as string) as Row[]).some((p) => !isBot(p as never)),
   );
   const derivedOf = new Map(allEnded.map((g) => [g.id as string, lineupOf(playersStmt.all(g.id as string) as Row[])]));
 
@@ -123,7 +134,7 @@ export function computeStats(db: Db, filter: StatsFilter = { settings: {} }): St
     let b = buckets.get(key);
     if (!b) {
       b = {
-        key, label, games: 0, wins: 0, losses: 0, draws: 0, winRate: null, survived: 0, byRole: {},
+        key, label, games: 0, distinctGames: 0, wins: 0, losses: 0, draws: 0, winRate: null, survived: 0, byRole: {},
         townVotes: 0, townVotesOnMafia: 0, voteAccuracy: null, kills: 0, messages: 0, avgMessageLength: null,
         tokensIn: 0, tokensOut: 0, costUsd: 0,
       };
@@ -149,11 +160,16 @@ export function computeStats(db: Db, filter: StatsFilter = { settings: {} }): St
 
     const players = playersStmt.all(gid) as Row[];
     const byPlayer = new Map<string, Bucket>();
+    const seenHere = new Set<string>();
     for (const p of players) {
       const { key, label } = modelLabel(p as never);
       const b = bucket(key, label);
       byPlayer.set(p.player_id as string, b);
       b.games++;
+      if (!seenHere.has(key)) {
+        seenHere.add(key);
+        b.distinctGames++;
+      }
       if (p.won === 1) b.wins++;
       else if (p.won === 0) b.losses++;
       else b.draws++;
