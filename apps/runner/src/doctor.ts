@@ -1,5 +1,4 @@
 import { spawn } from 'node:child_process';
-import crossSpawn from 'cross-spawn';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -8,6 +7,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { Api } from './api.ts';
 import { localPipeFor } from './pipe.ts';
+import { cliOutput } from './proc.ts';
 
 /**
  * Connection check without any model: every step prints OK or the exact failure.
@@ -19,20 +19,6 @@ const BRIDGE = join(dirname(fileURLToPath(import.meta.url)), 'mcp-bridge.mjs');
 async function cliVersion(cmd: string): Promise<string | null> {
   const out = await cliOutput(cmd, ['--version']);
   return out ? out.split(/\r?\n/)[0] : null;
-}
-
-function cliOutput(cmd: string, args: string[]): Promise<string | null> {
-  return new Promise((resolve) => {
-    const child = crossSpawn(cmd, args, { stdio: ['ignore', 'pipe', 'ignore'] });
-    let out = '';
-    child.stdout?.on('data', (c: Buffer) => (out += c.toString()));
-    child.on('error', () => resolve(null));
-    child.on('close', (code) => resolve(code === 0 ? out.replace(/\x1b\[[0-9;]*m/g, '').trim() : null));
-    setTimeout(() => {
-      child.kill();
-      resolve(null);
-    }, 20000).unref();
-  });
 }
 
 function describe(e: unknown): string {

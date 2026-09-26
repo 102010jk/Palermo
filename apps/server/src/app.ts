@@ -1,6 +1,6 @@
 import { existsSync, rmSync } from 'node:fs';
 import { createServer, type Server as HttpServer } from 'node:http';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { Server as IoServer, type Socket } from 'socket.io';
 import { DEFAULT_SETTINGS, GameError, type Game, type GameSettings, type GameState } from '@palermo/engine';
@@ -8,6 +8,7 @@ import { Auth, tokenFromRequest, type Principal } from './auth.ts';
 import { Db } from './db.ts';
 import { GameManager, type ManagerOptions } from './manager.ts';
 import { mcpHandler } from './mcp.ts';
+import { AgentPool, type PoolProvider } from './pool.ts';
 import { computeStats } from './stats.ts';
 
 export interface AppConfig {
@@ -26,6 +27,7 @@ export interface PalermoApp {
   db: Db;
   manager: GameManager;
   auth: Auth;
+  pool: AgentPool;
   close: () => Promise<void>;
 }
 
@@ -39,6 +41,7 @@ export function createPalermo(cfg: AppConfig): PalermoApp {
   const db = new Db(cfg.dataPath);
   const auth = new Auth(db, cfg.adminToken, cfg.googleClientId);
   const manager = new GameManager(db, cfg.manager);
+  const pool = new AgentPool(manager, auth, cfg.dataPath === ':memory:' ? null : join(dirname(cfg.dataPath), 'ai-pool.json'));
   const app = express();
   app.disable('x-powered-by');
   app.use(express.json({ limit: '1mb' }));
@@ -114,6 +117,35 @@ export function createPalermo(cfg: AppConfig): PalermoApp {
         throw new HttpError(401, (e as Error).message);
       }
     }),
+  );
+
+  // ------------------------------------------------------------------ admin: AI waiting list
+  const PROVIDERS = new Set<PoolProvider>(['claude', 'codex', 'agy', 'gemini', 'bot']);
+  app.get('/api/admin/pool', wrap((req) => (requireAdmin(req), pool.status())));
+  app.post(
+    '/api/admin/pool/picks',
+    wrap((req) => {
+      requireAdmin(req);
+      const b = req.body ?? {};
+      if (!PROVIDERS.has(b.provider) || typeof b.model !== 'string' || !b.model) throw new HttpError(400, 'provider and model required');
+      const count = Math.min(10, Math.max(1, Number(b.count) || 1));
+      for (let i = 0; i < count; i++) pool.add({ provider: b.provider, model: b.model, label: b.label, name: b.name, repeat: b.repeat });
+      return pool.status();
+    }),
+  );
+  app.patch(
+    '/api/admin/pool/picks/:id',
+    wrap((req) => (requireAdmin(req), pool.update(String(req.params.id), req.body ?? {}), pool.status())),
+  );
+  app.delete(
+    '/api/admin/pool/picks/:id',
+    wrap((req) => (requireAdmin(req), pool.remove(String(req.params.id)), pool.status())),
+  );
+  // Used by the agent launcher on the player's PC (runner --pool).
+  app.post('/api/admin/pool/hello', wrap((req) => (requireAdmin(req), pool.hello(req.body ?? {}))));
+  app.post(
+    '/api/admin/pool/finish',
+    wrap((req) => (requireAdmin(req), pool.finish(String(req.body?.pickId), req.body?.error ? String(req.body.error) : undefined), { ok: true })),
   );
 
   // ------------------------------------------------------------------ admin: agents
@@ -392,6 +424,7 @@ export function createPalermo(cfg: AppConfig): PalermoApp {
     db,
     manager,
     auth,
+    pool,
     close: async () => {
       manager.close();
       io.close();
@@ -408,7 +441,7 @@ export class HttpError extends Error {
   }
 }
 
-const BOOL_KEYS = ['revealRoleOnDeath', 'publicVotes', 'allowSkipVote', 'freedomMode', 'doctorNoRepeat', 'doctorLearnsSave', 'autoStart', 'announceRoles'] as const;
+const BOOL_KEYS = ['revealRoleOnDeath', 'publicVotes', 'allowSkipVote', 'freedomMode', 'doctorNoRepeat', 'doctorLearnsSave', 'autoStart', 'announceRoles', 'aiPool'] as const;
 const NUM_OR_NULL = ['nightTimeoutSec', 'dayTimeoutSec', 'maxRounds', 'maxMessageLength', 'maxMessagesPerPhase', 'chatCooldownSec'] as const;
 
 /** Accept only known settings with sane types from the admin UI / runner. */

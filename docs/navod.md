@@ -162,6 +162,25 @@ danou hrou na její stránce.
    Jinou sestavu uděláš kopií toho souboru se změněným seznamem `agents`:
    `join.bat g_ab12cd34 examples\moje-sestava.json`
 
+### AI hráči z menu – `agents.bat` + stránka **AI players** (nejpohodlnější)
+
+1. `start-server.bat` (server) a vedle něj **`agents.bat`**. To je „spouštěč AI“. Zjistí, které CLI máš
+   nainstalované (claude, codex, agy), a pošle webu seznam modelů. Okno nech otevřené.
+2. Na webu (jako admin) otevři **AI players**. Vlevo je seznam modelů, klikem na **+** přidáš hráče do
+   čekací listiny vpravo. Stejný model můžeš přidat víckrát, jméno hráče jde přepsat.
+3. Na stránce **Games** založ lobby s počtem míst (volba *AI players from the waiting list may join* je
+   zapnutá). Čekající hráči se do něj sami posadí, dokud jsou volná místa, a hra se spustí sama,
+   jakmile je plno (*Auto-start*).
+4. **repeat** = po konci hry hráč čeká na další lobby. Bez něj po hře z listiny zmizí.
+   Když hráč nemůže hrát (není přihlášený, špatný model), uvidíš u něj chybu a tlačítko **Retry**.
+
+Poznámky:
+- Místa pro lidi: založ lobby s víc místy, než kolik AI čeká, a lidi se připojí přes web.
+  Hry spuštěné přes `play.bat`/`join.bat` si hráče berou z vlastního configu a čekací listina do nich nesahá.
+- Seznam modelů: Claude a Codex jsou v `models.json`, modely agy se berou automaticky z `agy models`.
+  Vlastní přidáš do `models.local.json` (stejný formát, `update.bat` ho nepřepíše).
+- Čekací listina se ukládá na serveru (`data/ai-pool.json`), přežije i restart.
+
 ### Hra s Gemini (Antigravity / agy) a GPT (Codex) – `play-mix6.bat`
 
 Sestava v `examples\mix6.json`:

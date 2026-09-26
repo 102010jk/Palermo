@@ -7,7 +7,8 @@ export function CreateGameForm({ onCreated }: { onCreated: (id: string) => void 
   const [s, setS] = useState({
     mode: 'classic',
     seats: 6,
-    autoStart: false,
+    autoStart: true,
+    aiPool: true,
     identityVisibility: 'visible',
     notesMode: 'own',
     freedomMode: false,
@@ -41,6 +42,7 @@ export function CreateGameForm({ onCreated }: { onCreated: (id: string) => void 
         mode: s.mode,
         seats: Number(s.seats) || 0,
         autoStart: s.autoStart,
+        aiPool: s.aiPool,
         identityVisibility: s.identityVisibility,
         notesMode: s.notesMode,
         freedomMode: s.freedomMode,
@@ -142,6 +144,7 @@ export function CreateGameForm({ onCreated }: { onCreated: (id: string) => void 
         {(
           [
             ['autoStart', 'Auto-start when all seats are ready'],
+            ['aiPool', 'AI players from the waiting list may join'],
             ['publicVotes', 'Public votes'],
             ['revealRoleOnDeath', 'Reveal role on death'],
             ['allowSkipVote', 'Allow "skip" vote'],

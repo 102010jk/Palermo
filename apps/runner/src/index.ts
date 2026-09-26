@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { Api } from './api.ts';
 import { doctor } from './doctor.ts';
+import { runPool } from './pool.ts';
 import { botAdapter } from './adapters/bot.ts';
 import { claudeAdapter } from './adapters/claude.ts';
 import { codexAdapter } from './adapters/codex.ts';
@@ -96,12 +97,59 @@ async function runAgent(ctx: AgentContext, adapter: Adapter): Promise<string | u
   return undefined;
 }
 
+export interface LaunchOptions {
+  cfg: RunnerConfig;
+  api: Api;
+  skill: string;
+  spec: AgentSpec;
+  gameId: string;
+  token: string;
+  accountId: string;
+  runDir: string;
+  freedomMode: boolean;
+  color: number;
+}
+
+/** Plays one agent through one game (with relaunches). Returns a fatal error message if it could not play. */
+export async function launchAgent(o: LaunchOptions): Promise<string | undefined> {
+  const { spec, api } = o;
+  const workdir = join(o.runDir, spec.name.replace(/[^\w.-]/g, '_'));
+  mkdirSync(workdir, { recursive: true });
+  const logFile = join(workdir, 'agent.log');
+  const ctx: AgentContext = {
+    spec,
+    serverUrl: o.cfg.server,
+    mcpUrl: `${o.cfg.server.replace(/\/$/, '')}/mcp`,
+    token: o.token,
+    gameId: o.gameId,
+    workdir,
+    freedomMode: o.freedomMode,
+    skill: o.skill,
+    api,
+    reportModel: (model) => {
+      if (model === spec.model) return;
+      api.setAgentModel(o.accountId, model).catch((e) => ctx.log(`model report failed: ${e.message}`));
+    },
+    log: (line) => {
+      const ts = new Date().toISOString().slice(11, 19);
+      console.log(`\x1b[${o.color}m[${spec.name}]\x1b[0m ${line}`);
+      appendFileSync(logFile, `${ts} ${line}\n`);
+    },
+  };
+  try {
+    return await runAgent(ctx, ADAPTERS[spec.provider]);
+  } catch (e) {
+    ctx.log(`crashed: ${(e as Error).stack ?? e}`);
+    return undefined;
+  }
+}
+
 async function playOneGame(cfg: RunnerConfig, api: Api, skill: string, gameNo: number): Promise<string> {
   let gameId = cfg.gameId;
   const created = !gameId;
   if (!gameId) {
     const seats = cfg.agents.length + (cfg.serverBots ?? 0) + (cfg.humanSeats ?? 0);
-    const g = await api.createGame({ ...cfg.settings, autoStart: true, seats });
+    const g = await api.createGame({ aiPool: false, ...cfg.settings, autoStart: true, seats });
     gameId = g.id;
     console.log(`Created game ${gameId} with ${seats} seats → ${cfg.server}/game/${gameId}`);
   }
@@ -119,36 +167,7 @@ async function playOneGame(cfg: RunnerConfig, api: Api, skill: string, gameNo: n
   const jobs = cfg.agents.map(async (spec, i) => {
     if (cfg.staggerMs) await new Promise((r) => setTimeout(r, i * cfg.staggerMs!));
     const agent = await api.createAgent({ name: spec.name, provider: PROVIDER_NAME[spec.provider], model: spec.model, verified: true });
-    const workdir = join(runDir, spec.name.replace(/[^\w.-]/g, '_'));
-    mkdirSync(workdir, { recursive: true });
-    const logFile = join(workdir, 'agent.log');
-    const color = COLORS[i % COLORS.length];
-    const ctx: AgentContext = {
-      spec,
-      serverUrl: cfg.server,
-      mcpUrl: `${cfg.server.replace(/\/$/, '')}/mcp`,
-      token: agent.token,
-      gameId: gameId!,
-      workdir,
-      freedomMode,
-      skill,
-      api,
-      reportModel: (model) => {
-        if (model === spec.model) return;
-        api.setAgentModel(agent.account.id, model).catch((e) => ctx.log(`model report failed: ${e.message}`));
-      },
-      log: (line) => {
-        const ts = new Date().toISOString().slice(11, 19);
-        console.log(`\x1b[${color}m[${spec.name}]\x1b[0m ${line}`);
-        appendFileSync(logFile, `${ts} ${line}\n`);
-      },
-    };
-    try {
-      return await runAgent(ctx, ADAPTERS[spec.provider]);
-    } catch (e) {
-      ctx.log(`crashed: ${(e as Error).stack ?? e}`);
-      return undefined;
-    }
+    return launchAgent({ cfg, api, skill, spec, gameId: gameId!, token: agent.token, accountId: agent.account.id, runDir, freedomMode, color: COLORS[i % COLORS.length] });
   });
   const fatals = (await Promise.all(jobs)).filter((x): x is string => !!x);
   let final: any;
@@ -222,6 +241,7 @@ async function main() {
       agent: { type: 'string', short: 'a', multiple: true },
       'create-only': { type: 'boolean' },
       check: { type: 'boolean' },
+      pool: { type: 'boolean' },
     },
   });
   // npm runs workspace scripts inside apps/runner; resolve paths from where the user invoked npm.
@@ -249,12 +269,16 @@ async function main() {
   }
   if (values['create-only']) {
     const seats = cfg.agents.length + (cfg.serverBots ?? 0) + (cfg.humanSeats ?? 0);
-    const g = await api.createGame({ ...cfg.settings, autoStart: true, seats });
+    const g = await api.createGame({ aiPool: false, ...cfg.settings, autoStart: true, seats });
     if (cfg.serverBots) await api.addBots(g.id, cfg.serverBots);
     console.log(g.id);
     return;
   }
   const skill = loadSkill(resolve(cfg.skillPath ?? join(root, 'skills/palermo-player/SKILL.md')));
+  if (values.pool) {
+    await runPool(cfg, api, skill, root);
+    return;
+  }
   const games = Number(values.games ?? cfg.games ?? 1);
   for (let i = 1; i <= games; i++) {
     await playOneGame(cfg, api, skill, i);

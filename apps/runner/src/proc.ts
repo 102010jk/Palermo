@@ -64,3 +64,18 @@ export function short(s: string, n = 160): string {
   const one = s.replace(/\s+/g, ' ').trim();
   return one.length > n ? `${one.slice(0, n)}…` : one;
 }
+
+/** Output of a short CLI command (e.g. `agy models`), or null if it failed or is not installed. */
+export function cliOutput(cmd: string, args: string[]): Promise<string | null> {
+  return new Promise((resolve) => {
+    const child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'ignore'] });
+    let out = '';
+    child.stdout?.on('data', (c: Buffer) => (out += c.toString()));
+    child.on('error', () => resolve(null));
+    child.on('close', (code) => resolve(code === 0 ? out.replace(/\x1b\[[0-9;]*m/g, '').trim() : null));
+    setTimeout(() => {
+      child.kill();
+      resolve(null);
+    }, 20000).unref();
+  });
+}

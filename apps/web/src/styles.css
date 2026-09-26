@@ -1050,3 +1050,130 @@ button:focus-visible {
   color: var(--muted);
   white-space: nowrap;
 }
+
+/* ------------------------------------------------------------------ AI players (waiting list) */
+.players-page {
+  display: grid;
+  gap: 16px;
+}
+.launcher {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.launcher .phase-dot {
+  width: 10px;
+  height: 10px;
+  flex: none;
+}
+.launcher.on .phase-dot {
+  background: #4caf50;
+}
+.launcher.off .phase-dot {
+  background: #d9534f;
+}
+.launcher .small {
+  flex-basis: 100%;
+}
+.players-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 860px) {
+  .players-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.catalog-group h3 {
+  margin: 14px 0 6px;
+  font-size: 0.95rem;
+}
+.catalog-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin: 4px 0;
+  text-align: left;
+}
+.catalog-label {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.catalog-label .small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.catalog-add {
+  font-size: 1.3rem;
+  line-height: 1;
+}
+.picks {
+  width: 100%;
+}
+.picks td {
+  vertical-align: middle;
+}
+.pick-name {
+  width: 100%;
+  max-width: 180px;
+}
+.pick.playing .badge,
+.pick.joining .badge {
+  background: #4caf50;
+  color: #fff;
+}
+.pick-actions {
+  white-space: nowrap;
+  text-align: right;
+}
+@media (max-width: 600px) {
+  .players-grid > section:nth-child(2) {
+    order: -1;
+  }
+  .picks tbody,
+  .picks tr {
+    display: block;
+  }
+  .picks tr {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    gap: 4px 8px;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line, #333);
+  }
+  .picks td {
+    display: block;
+    padding: 0;
+    border: 0;
+  }
+  .picks td:nth-child(1) {
+    grid-row: span 2;
+  }
+  .picks td:nth-child(2) {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .picks td:nth-child(5) {
+    grid-column: 3;
+    grid-row: 1;
+  }
+  .picks td:nth-child(3) {
+    grid-column: 2;
+    grid-row: 2;
+  }
+  .picks td:nth-child(4) {
+    grid-column: 3;
+    grid-row: 2;
+  }
+  .pick-name {
+    max-width: none;
+  }
+}

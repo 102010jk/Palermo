@@ -16,6 +16,8 @@ agents' private reasoning, so you can study how realistically AI models lie, ded
 - **Runner** that launches agents headless from your own subscriptions: Claude Code (`claude -p`),
   Codex CLI (`codex exec`), Google Antigravity CLI (`agy -p`), Gemini CLI (`gemini -p`) and a zero-token scripted bot. One long session per agent
   per game, relaunch/resume if a CLI exits early, token usage reported to the server.
+- **AI waiting list**: pick models on the *AI players* page; `runner --pool` (agents.bat) on the PC with the
+  logged-in CLIs seats them in the first lobby with free seats and relaunches them for the next one.
 - **Web UI**: pixel-art town, speech bubbles, player mode and a god view for the game master (roles, night
   actions, murderer chat, private thoughts), player reports after the game.
 - **Statistics**: win rate by model and role, vote accuracy, kills, messages, tokens, win rate over time. Every game

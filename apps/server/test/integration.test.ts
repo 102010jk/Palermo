@@ -135,4 +135,25 @@ describe('server', () => {
     expect(spectator.events.some((e: any) => e.type === 'role_assigned')).toBe(false);
     await api('POST', `/api/games/${gameId}/abort`, {});
   });
+
+  it('seats waiting AI players from the pool only in lobbies open to it, up to the free seats', async () => {
+    for (const g of (await api('GET', '/api/games')).body) if (g.phase === 'lobby') await api('POST', `/api/games/${g.id}/abort`, {});
+    const closed = (await api('POST', '/api/games', { settings: { mode: 'pool-closed', seats: 3, aiPool: false } })).body.id;
+    const open = (await api('POST', '/api/games', { settings: { mode: 'pool-open', seats: 2 } })).body.id;
+    await api('POST', '/api/admin/pool/picks', { provider: 'bot', model: 'script', label: 'Bot', count: 3, repeat: false });
+    const hello = await api('POST', '/api/admin/pool/hello', { host: 'test', catalog: [{ provider: 'bot', model: 'script', label: 'Bot' }] });
+    const assigned = hello.body.assignments.filter((a: { gameId: string }) => a.gameId === open || a.gameId === closed);
+    expect(assigned.map((a: { gameId: string }) => a.gameId)).toEqual([open, open]);
+    // The launcher has not seated them yet: the seats stay reserved, so a second poll assigns nobody else there.
+    const again = await api('POST', '/api/admin/pool/hello', { host: 'test', running: assigned.map((a: { pickId: string }) => a.pickId) });
+    expect(again.body.assignments.filter((a: { gameId: string }) => a.gameId === open)).toEqual([]);
+    const status = (await api('GET', '/api/admin/pool')).body;
+    expect(status.online).toBe(true);
+    expect(status.picks.filter((p: { status: string }) => p.status === 'waiting')).toHaveLength(1);
+    // Without repeat, a finished pick leaves the list.
+    await api('POST', '/api/admin/pool/finish', { pickId: assigned[0].pickId });
+    expect((await api('GET', '/api/admin/pool')).body.picks).toHaveLength(2);
+    await api('POST', `/api/games/${closed}/abort`, {});
+    await api('POST', `/api/games/${open}/abort`, {});
+  });
 });

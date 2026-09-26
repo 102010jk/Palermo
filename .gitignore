@@ -6,3 +6,4 @@ data/
 .env
 runner.config.json
 .claude-token
+models.local.json

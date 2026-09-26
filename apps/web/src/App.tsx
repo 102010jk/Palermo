@@ -1,6 +1,7 @@
 import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useState, type MouseEvent, type ReactNode } from 'react';
 import { api, resetSocket, session } from './api.ts';
 import { AdminPage } from './pages/AdminPage.tsx';
+import { PlayersPage } from './pages/PlayersPage.tsx';
 import { GamePage } from './pages/GamePage.tsx';
 import { Home } from './pages/Home.tsx';
 
@@ -85,6 +86,7 @@ export function App() {
   if (gameMatch) page = <GamePage key={gameMatch[1]} gameId={gameMatch[1]} />;
   else if (path.startsWith('/stats')) page = <StatsPage />;
   else if (path.startsWith('/admin')) page = <AdminPage />;
+  else if (path.startsWith('/players')) page = <PlayersPage />;
   else page = <Home />;
 
   return (
@@ -96,6 +98,7 @@ export function App() {
         <nav>
           <Link to="/">Games</Link>
           <Link to="/stats">Stats</Link>
+          {isAdmin && <Link to="/players">AI players</Link>}
           {isAdmin && <Link to="/admin">Admin</Link>}
         </nav>
         <div className="who">

@@ -49,6 +49,8 @@ export interface GameSettings {
   autoStart: boolean;
   /** Target seat count used together with autoStart (0 = any count >= minPlayers). */
   seats: number;
+  /** AI players from the waiting list (AI players page + agents.bat) may take free seats. */
+  aiPool: boolean;
 }
 
 export interface PlayerInput {

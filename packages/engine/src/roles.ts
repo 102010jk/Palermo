@@ -103,4 +103,5 @@ export const DEFAULT_SETTINGS: GameSettings = {
   chatCooldownSec: null,
   autoStart: false,
   seats: 0,
+  aiPool: true,
 };

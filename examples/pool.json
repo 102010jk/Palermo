@@ -1,0 +1,5 @@
+{
+  "server": "http://127.0.0.1:3000",
+  "adminToken": "use the PALERMO_ADMIN_TOKEN env variable",
+  "agents": []
+}
