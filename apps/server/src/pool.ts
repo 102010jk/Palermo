@@ -125,6 +125,12 @@ export class AgentPool {
     this.save();
   }
 
+  /** Forget series that are no longer running (their games stay in the records and stats). */
+  clearFinishedSeries(): void {
+    this.series = this.series.filter((x) => x.active);
+    this.save();
+  }
+
   private finishedGames(x: Series): number {
     return x.gameIds.filter((id) => {
       const g = this.manager.get(id);

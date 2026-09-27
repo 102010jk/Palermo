@@ -113,7 +113,14 @@ export function PlayersPage() {
 
       {!!pool.series?.length && (
         <section className="card series-card">
-          <h2>Series</h2>
+          <div className="row series-head">
+            <h2>Series</h2>
+            {pool.series.some((x) => !x.active) && (
+              <button className="small ghost" title="Remove finished and stopped series from this list (their games stay in the records and stats)" onClick={() => call('POST', '/api/admin/series/clear')}>
+                Clear finished
+              </button>
+            )}
+          </div>
           {pool.series
             .slice()
             .reverse()

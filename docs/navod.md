@@ -253,6 +253,13 @@ danou hrou na její stránce.
    Jinou sestavu uděláš kopií toho souboru se změněným seznamem `agents`:
    `join.bat g_ab12cd34 examples\moje-sestava.json`
 
+### Verze, changelog, statistiky podle firem
+
+- Vpravo v menu je číslo verze (např. **v0.8.0**). Kliknutím se otevře **changelog** (co je nového). Zdroj je `CHANGELOG.md`.
+- **Stats → Group by**: *Model* (každý model zvlášť), *Model family* (sloučí úrovně jako
+  gemini-3.8-flash-low / medium / high do jednoho „gemini-3.8-flash“) nebo *Company* (Anthropic / OpenAI / Google).
+- **AI players → Series → Clear finished** odebere dokončené a zastavené série ze seznamu. Hry ze sérií zůstanou v záznamech i statistikách.
+
 ### Hrát s AI: místa pro lidi
 
 1. *New game → Players → **Seats for people***: kolik míst AI hráči z čekací listiny nechají volných

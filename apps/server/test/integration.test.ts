@@ -2,7 +2,7 @@ import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { playBotOverMcp } from '../../runner/src/adapters/bot.ts';
 import { createPalermo, type PalermoApp } from '../src/app.ts';
-import { computeStats } from '../src/stats.ts';
+import { computeStats, groupLabel } from '../src/stats.ts';
 
 const ADMIN = 'test-admin-token';
 let app: PalermoApp;
@@ -286,6 +286,27 @@ describe('server', () => {
     expect(lw.status).toBe(200);
     expect(g.state.events.some((e) => e.type === 'last_words')).toBe(true);
     await api('POST', `/api/games/${gameId}/abort`, {});
+  });
+
+  it('groups stats by model family or company, serves version and changelog, clears finished series', async () => {
+    const p = (provider: string, model: string) => ({ kind: 'ai', provider, model, name: 'x' });
+    expect(groupLabel(p('google', 'gemini-3.8-flash-high'), 'family').label).toBe('gemini-3.8-flash');
+    expect(groupLabel(p('google', 'gemini-3.8-flash-low'), 'family').key).toBe(groupLabel(p('google', 'gemini-3.8-flash-medium'), 'family').key);
+    expect(groupLabel(p('anthropic', 'claude-haiku-4-5-20251001'), 'family').label).toBe('claude-haiku-4-5');
+    expect(groupLabel(p('openai', 'gpt-5.6-terra'), 'company').label).toBe('OpenAI');
+    expect(groupLabel(p('google', 'gemini-3.1-pro-high'), 'model').label).toBe('gemini-3.1-pro-high');
+    expect((await api('GET', '/api/stats?group=company')).status).toBe(200);
+
+    const log = (await api('GET', '/api/changelog')).body;
+    expect(log.version).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(log.text).toContain(`## ${log.version}`);
+    expect((await api('GET', '/api/config')).body.version).toBe(log.version);
+
+    const series = (await api('POST', '/api/admin/series', { count: 2, settings: { mode: 'clear-t', seats: 3 } })).body;
+    const id = series.series?.id ?? series.id;
+    await api('POST', `/api/admin/series/${id}/stop`, {});
+    const after = (await api('POST', '/api/admin/series/clear', {})).body;
+    expect(after.series.some((x: { id: string }) => x.id === id)).toBe(false);
   });
 
   it('exports a game as JSON and all finished games as CSV', async () => {

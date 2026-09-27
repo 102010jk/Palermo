@@ -1,6 +1,7 @@
-import { existsSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { createServer, type Server as HttpServer } from 'node:http';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { Server as IoServer, type Socket } from 'socket.io';
 import { DEFAULT_SETTINGS, GameError, ROLE_ORDER, type Game, type GameSettings, type GameState } from '@palermo/engine';
@@ -9,7 +10,24 @@ import { Db } from './db.ts';
 import { GameManager, type ManagerOptions } from './manager.ts';
 import { mcpHandler } from './mcp.ts';
 import { AgentPool, type PoolProvider } from './pool.ts';
-import { computeStats } from './stats.ts';
+import { computeStats, type StatsGroup } from './stats.ts';
+
+/** Repository root (version and changelog live there). */
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
+const readText = (file: string) => {
+  try {
+    return readFileSync(join(ROOT, file), 'utf8');
+  } catch {
+    return '';
+  }
+};
+const VERSION = (() => {
+  try {
+    return String(JSON.parse(readText('package.json')).version ?? '?');
+  } catch {
+    return '?';
+  }
+})();
 
 export interface AppConfig {
   dataPath: string;
@@ -95,8 +113,9 @@ export function createPalermo(cfg: AppConfig): PalermoApp {
 
   // ------------------------------------------------------------------ auth
   app.get('/api/config', (_req, res) => {
-    res.json({ googleClientId: cfg.googleClientId, allowGuests: cfg.allowGuests, defaults: DEFAULT_SETTINGS });
+    res.json({ googleClientId: cfg.googleClientId, allowGuests: cfg.allowGuests, defaults: DEFAULT_SETTINGS, version: VERSION });
   });
+  app.get('/api/changelog', (_req, res) => res.json({ version: VERSION, text: readText('CHANGELOG.md') }));
   app.get('/api/me', (req, res) => {
     const p = req.principal;
     res.json(p.type === 'admin' ? { admin: true } : p.type === 'account' ? { admin: false, account: p.account } : { admin: false });
@@ -154,6 +173,7 @@ export function createPalermo(cfg: AppConfig): PalermoApp {
       return { id: x.id, firstGame: x.gameIds[0] };
     }),
   );
+  app.post('/api/admin/series/clear', wrap((req) => (requireAdmin(req), pool.clearFinishedSeries(), pool.status())));
   app.post('/api/admin/series/:id/stop', wrap((req) => (requireAdmin(req), pool.stopSeries(String(req.params.id)), pool.status())));
   // Used by the agent launcher on the player's PC (runner --pool).
   app.post('/api/admin/pool/hello', wrap((req) => (requireAdmin(req), pool.hello(req.body ?? {}))));
@@ -461,6 +481,7 @@ export function createPalermo(cfg: AppConfig): PalermoApp {
         settings,
         playerCount: req.query.players ? Number(req.query.players) : undefined,
         since: req.query.since ? Number(req.query.since) : undefined,
+        group: (['model', 'family', 'company'] as const).find((g) => g === req.query.group) as StatsGroup | undefined,
       });
     }),
   );

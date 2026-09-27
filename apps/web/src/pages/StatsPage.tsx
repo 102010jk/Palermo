@@ -62,20 +62,23 @@ const FILTERS: { key: string; label: string; wide?: boolean }[] = [
 
 const pct = (x: number | null | undefined) => (x == null ? '–' : `${Math.round(x * 100)}%`);
 
-function useStats(filters: Record<string, string>, players: string) {
+type Group = 'model' | 'family' | 'company';
+
+function useStats(filters: Record<string, string>, players: string, group: Group) {
   const [stats, setStats] = useState<Stats | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     const q = new URLSearchParams();
     for (const [k, v] of Object.entries(filters)) if (v) q.set(`s.${k}`, v);
     if (players) q.set('players', players);
+    if (group !== 'model') q.set('group', group);
     api<Stats>('GET', `/api/stats?${q}`)
       .then((s) => {
         setStats(s);
         setError(null);
       })
       .catch((e) => setError(e.message));
-  }, [JSON.stringify(filters), players]);
+  }, [JSON.stringify(filters), players, group]);
   return { stats, error };
 }
 
@@ -85,15 +88,27 @@ function Filters({
   setFilter,
   players,
   setPlayers,
+  group,
+  setGroup,
 }: {
   values: Record<string, string[]>;
   filters: Record<string, string>;
   setFilter: (k: string, v: string) => void;
   players: string;
   setPlayers: (v: string) => void;
+  group: Group;
+  setGroup: (g: Group) => void;
 }) {
   return (
     <div className="filters">
+      <label title="Merge players: exact model, model family (effort levels like low / medium / high together) or company">
+        Group by
+        <select value={group} onChange={(e) => setGroup(e.target.value as Group)}>
+          <option value="model">Model</option>
+          <option value="family">Model family (merge effort levels)</option>
+          <option value="company">Company (Anthropic / OpenAI / Google)</option>
+        </select>
+      </label>
       {FILTERS.map((f) => (
         <label key={f.key} className={f.wide ? 'wide' : undefined}>
           {f.label}
@@ -118,7 +133,8 @@ function Filters({
 function Panel({ title, colorIndexByKey }: { title?: string; colorIndexByKey: (key: string) => number }) {
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [players, setPlayers] = useState('');
-  const { stats, error } = useStats(filters, players);
+  const [group, setGroup] = useState<Group>('model');
+  const { stats, error } = useStats(filters, players, group);
   const [showTable, setShowTable] = useState(true);
 
   const models = useMemo(() => stats?.byModel ?? [], [stats]);
@@ -147,6 +163,8 @@ function Panel({ title, colorIndexByKey }: { title?: string; colorIndexByKey: (k
         setFilter={(k, v) => setFilters((f) => ({ ...f, [k]: v }))}
         players={players}
         setPlayers={setPlayers}
+        group={group}
+        setGroup={setGroup}
       />
       {error && <p className="error">{error}</p>}
       {stats && (

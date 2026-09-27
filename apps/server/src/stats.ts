@@ -8,10 +8,30 @@ const isMafia = (role: string | undefined) => !!role && teamOf(role as RoleId) =
  * can be used as a filter (e.g. identityVisibility=anonymous & notesMode=none) to keep experiments separate.
  */
 
+/** How players are grouped: exact model, model family (effort levels merged) or company. */
+export type StatsGroup = 'model' | 'family' | 'company';
+
+const COMPANY: Record<string, string> = { anthropic: 'Anthropic', openai: 'OpenAI', google: 'Google' };
+const EFFORT = /-(minimal|low|medium|high|xhigh|max)$/;
+
+/** Regroup a model bucket: "gemini-3.8-flash-high" -> "gemini-3.8-flash" (family) or "Google" (company). */
+export function groupLabel(p: Parameters<typeof modelLabel>[0], group: StatsGroup = 'model'): { key: string; label: string } {
+  const base = modelLabel(p);
+  if (group === 'model' || p.kind === 'human' || isBot(p) || !p.model) return base;
+  if (group === 'company') {
+    const c = (p.provider ?? '?').toLowerCase();
+    return { key: `company:${c}`, label: COMPANY[c] ?? c };
+  }
+  const family = base.label.replace(EFFORT, '');
+  return { key: `${p.provider ?? '?'}:${family}`, label: family };
+}
+
 export interface StatsFilter {
   /** settings key -> required value (string compare) */
   settings: Record<string, string>;
   playerCount?: number;
+  /** Merge players into model families or companies (default: exact model). */
+  group?: StatsGroup;
   since?: number;
   until?: number;
 }
@@ -176,7 +196,7 @@ export function computeStats(db: Db, filter: StatsFilter = { settings: {} }): St
     const byPlayer = new Map<string, Bucket>();
     const seenHere = new Set<string>();
     for (const p of players) {
-      const { key, label } = modelLabel(p as never);
+      const { key, label } = groupLabel(p as never, filter.group);
       const b = bucket(key, label);
       byPlayer.set(p.player_id as string, b);
       b.games++;

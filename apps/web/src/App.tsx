@@ -3,6 +3,7 @@ import { api, resetSocket, session } from './api.ts';
 import { AdminPage } from './pages/AdminPage.tsx';
 import { PlayersPage } from './pages/PlayersPage.tsx';
 import { NewGamePage } from './pages/NewGamePage.tsx';
+import { ChangelogPage } from './pages/ChangelogPage.tsx';
 import { GamePage } from './pages/GamePage.tsx';
 import { Home } from './pages/Home.tsx';
 
@@ -19,6 +20,7 @@ export interface AppConfig {
   googleClientId: string | null;
   allowGuests: boolean;
   defaults: Record<string, unknown>;
+  version?: string;
 }
 
 interface Ctx {
@@ -89,6 +91,7 @@ export function App() {
   else if (path.startsWith('/admin')) page = <AdminPage />;
   else if (path.startsWith('/players')) page = <PlayersPage />;
   else if (path.startsWith('/new')) page = <NewGamePage />;
+  else if (path.startsWith('/changelog')) page = <ChangelogPage />;
   else page = <Home />;
 
   return (
@@ -102,6 +105,11 @@ export function App() {
           <Link to="/stats">Stats</Link>
           {isAdmin && <Link to="/players">AI players</Link>}
           {isAdmin && <Link to="/admin">Admin</Link>}
+          {config?.version && (
+            <Link to="/changelog" className="version-link">
+              v{config.version}
+            </Link>
+          )}
         </nav>
         <div className="who">
           {account ? <span>{account.name}</span> : <span className="muted">not signed in</span>}
