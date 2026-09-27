@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { localPipeFor } from '../pipe.ts';
@@ -53,6 +54,20 @@ const SAFEGUARD = /safeguards flagged|usage polic|legal\/aup/i;
 
 const AUTH_ERROR = /authenticat|oauth|invalid api key|\/login|not logged in|credit balance/i;
 
+/** Rules-mode sessions skip user settings, so carry over the user's reasoning effort explicitly. */
+function userEffortLevel(): string | undefined {
+  // Claude Code itself still reads this override from the environment.
+  if (process.env.CLAUDE_CODE_EFFORT_LEVEL) return undefined;
+  const configDir = process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude');
+  try {
+    const settings = JSON.parse(readFileSync(join(configDir, 'settings.json'), 'utf8'));
+    const effort = settings.effortLevel;
+    return ['low', 'medium', 'high', 'xhigh', 'max'].includes(effort) ? effort : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export const claudeAdapter: Adapter = {
   async run(ctx: AgentContext, launch: Launch): Promise<RunResult> {
     const mcpPath = join(ctx.workdir, 'mcp.json');
@@ -93,6 +108,11 @@ export const claudeAdapter: Adapter = {
     if (ctx.freedomMode) {
       args.push('--append-system-prompt-file', promptPath, '--permission-mode', 'bypassPermissions');
     } else {
+      // The generated workdir has no project settings. This excludes unrelated user hooks, plugins and
+      // CLAUDE.md context while keeping OAuth, the explicit Palermo MCP server and the same model effort.
+      args.push('--setting-sources', 'project');
+      const effort = userEffortLevel();
+      if (effort) args.push('--effort', effort);
       args.push('--system-prompt-file', promptPath, '--tools', '', '--allowedTools', 'mcp__palermo', '--permission-mode', 'dontAsk');
     }
     // Debug log: the only place where Claude Code says *why* an MCP connection failed.
@@ -122,6 +142,9 @@ export const claudeAdapter: Adapter = {
             ctx.log(`MCP details: ${short(JSON.stringify(srv ?? {}), 300)}`);
             fatal = `Claude Code could not connect to the palermo MCP server at ${ctx.mcpUrl}`;
           }
+        } else if (m.type === 'system' && m.subtype === 'model_refusal_no_fallback') {
+          blocked = String(m.api_refusal_category ?? 'model refusal');
+          ctx.log(`model refusal: ${blocked}`);
         } else if (m.type === 'system' && m.subtype !== 'init') {
           // e.g. API retries while Anthropic is overloaded: explains a slow start.
           const { type: _t, session_id: _s, uuid: _u, ...rest } = m;

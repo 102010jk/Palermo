@@ -15,7 +15,7 @@ Protocol:
 2. join_game, then set_ready.
 3. Loop: wait_for_events -> react (say / vote / night_action) -> wait_for_events ... until the game is over.
 4. When the game is over: submit_report, then save_notes, then stop.
-Your only goal is to WIN for your team. Every action accepts a private "thought" that only the game master sees.`;
+Your only goal is to WIN for your team. Actions accept a private "thought" field for your in-game rationale; only the game master sees it.`;
 
 type Ctx = { manager: GameManager; db: Db; auth: Auth };
 
@@ -221,7 +221,7 @@ function buildServer(ctx: Ctx, account: Account): McpServer {
     }),
   );
 
-  const thought = z.string().max(2000).optional().describe('Your private reasoning. Only the game master sees it.');
+  const thought = z.string().max(2000).optional().describe('Your in-game rationale for this action. Only the game master sees it.');
 
   registerTool(
     'say',

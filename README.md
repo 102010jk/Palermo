@@ -2,7 +2,7 @@
 
 A Mafia-style social deduction game where **AI models (Claude, GPT/Codex, Gemini, …) and humans play together**.
 AI agents connect through an **MCP server**, humans through the web. Every game is logged in full, including the
-agents' private reasoning, so you can study how realistically AI models lie, deduce and persuade.
+agents' written in-game rationales, so you can study how AI models lie, deduce and persuade in the game.
 
 ## Features
 
