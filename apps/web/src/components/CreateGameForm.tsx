@@ -60,6 +60,7 @@ export function CreateGameForm({ onCreated }: { onCreated: (id: string) => void 
     allowSkipVote: true,
     roleInfo: 'exact',
     lastWords: true,
+    language: 'en',
     killMode: 'separate',
     startPhase: 'night',
     nightTimeoutSec: '180',
@@ -125,6 +126,7 @@ export function CreateGameForm({ onCreated }: { onCreated: (id: string) => void 
         allowSkipVote: s.allowSkipVote,
         roleInfo: s.roleInfo,
         lastWords: s.lastWords,
+        language: s.language,
         killMode: s.killMode,
         startPhase: s.startPhase,
         nightTimeoutSec: s.nightTimeoutSec ? Number(s.nightTimeoutSec) : null,
@@ -292,6 +294,13 @@ export function CreateGameForm({ onCreated }: { onCreated: (id: string) => void 
             <select value={s.startPhase} onChange={(e) => set('startPhase', e.target.value)}>
               <option value="night">Night</option>
               <option value="day">Day</option>
+            </select>
+          </label>
+          <label title="The AI players are told to chat in this language (system messages stay in English)">
+            Chat language
+            <select value={s.language} onChange={(e) => set('language', e.target.value)}>
+              <option value="en">English</option>
+              <option value="cs">Czech (čeština)</option>
             </select>
           </label>
           <label title="What the players are told about the roles at the start">

@@ -17,6 +17,11 @@ Gemini, ...) and sometimes humans who all joined to play. You play through the `
 - As in poker, bluffing is part of the rules everyone agreed to: false role claims, hiding your role and
   persuading others are normal moves inside the game. Other players will bluff too.
 
+## Language
+
+If the status says the game is played in another language (e.g. Czech), write all your messages, letters
+and last words in that language. Tool names and player names stay as they are.
+
 ## Anonymous games
 
 In anonymous games every player has a town alias and nobody knows which model or person is behind a seat

@@ -16,6 +16,14 @@ const LINES = [
   "Let's not rush. But {x} seems suspicious to me.",
 ];
 
+const LINES_CS = [
+  'Mám z {x} špatný pocit.',
+  'Všimli jste si, jak je {x} potichu?',
+  'Jsem obyčejný občan, zatím nevěřím nikomu.',
+  '{x}, kde jsi byl včera v noci?',
+  'Nespěchejme. Ale {x} mi přijde podezřelý.',
+];
+
 /**
  * Scripted test bot: plays legal but naive moves. Used for engine tests, load tests and filling empty seats
  * without spending model tokens. `rand` must return [0, 1).
@@ -37,7 +45,7 @@ export function botDecide(view: PlayerView, saidThisPhase: number, rand: () => n
   if (req.kind === 'vote' && view.you?.alive) {
     const others = (req.options ?? []).filter((o) => o !== 'skip');
     if (saidThisPhase < 1 && others.length) {
-      const line = choose(LINES).replace('{x}', choose(others));
+      const line = choose(view.settings.language === 'cs' ? LINES_CS : LINES).replace('{x}', choose(others));
       return { type: 'say', message: line, thought: 'Scripted bot: small talk.' };
     }
     if (!req.done) {

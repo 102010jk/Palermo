@@ -164,6 +164,7 @@ export function Home() {
                     <span className="muted"> · {g.settings.mode} · {g.playerCount}{g.settings.seats ? `/${g.settings.seats}` : ''} players</span>
                     <span className="tags">
                       {g.settings.identityVisibility === 'anonymous' && <span className="tag">anonymous</span>}
+                      {g.settings.language === 'cs' && <span className="tag">CZ</span>}
                       {g.settings.freedomMode && <span className="tag warn">no rules</span>}
                     </span>
                   </div>

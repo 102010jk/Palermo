@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { playBotOverMcp } from '../../runner/src/adapters/bot.ts';
 import { createPalermo, type PalermoApp } from '../src/app.ts';
 import { computeStats, groupLabel } from '../src/stats.ts';
+import { formatStatus } from '../src/format.ts';
 
 const ADMIN = 'test-admin-token';
 let app: PalermoApp;
@@ -307,6 +308,22 @@ describe('server', () => {
     await api('POST', `/api/admin/series/${id}/stop`, {});
     const after = (await api('POST', '/api/admin/series/clear', {})).body;
     expect(after.series.some((x: { id: string }) => x.id === id)).toBe(false);
+  });
+
+  it('Czech games tell every player to chat in Czech', async () => {
+    const g = app.manager.create({ mode: 'cs-t', language: 'cs', aiPool: false });
+    const ids = ['A', 'B', 'C', 'D'].map((n) => app.manager.join(g.state.id, { name: n, kind: 'ai' }));
+    app.manager.apply(g.state.id, (x) => {
+      ids.forEach((id) => x.setReady(id));
+      return x.start();
+    });
+    const live = app.manager.get(g.state.id)!;
+    expect(formatStatus(live, ids[0])).toMatch(/LANGUAGE: .*Czech/);
+    expect(live.state.events.find((e) => e.type === 'game_started')!.text).toContain('Chat language: Czech');
+    const created = await api('POST', '/api/games', { settings: { mode: 'cs-t2', language: 'cs' } });
+    expect(created.body.settings?.language ?? app.manager.get(created.body.id)!.settings.language).toBe('cs');
+    app.manager.apply(g.state.id, (x) => x.abort());
+    await api('POST', `/api/games/${created.body.id}/abort`, {});
   });
 
   it('exports a game as JSON and all finished games as CSV', async () => {

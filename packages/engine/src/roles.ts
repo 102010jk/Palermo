@@ -222,6 +222,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   announceRoles: true,
   roleInfo: null,
   lastWords: true,
+  language: 'en',
   maxMessageLength: null,
   maxMessagesPerPhase: null,
   chatCooldownSec: null,

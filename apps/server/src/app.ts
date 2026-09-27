@@ -622,6 +622,7 @@ export function sanitizeSettings(input: Record<string, unknown>): Partial<GameSe
     out.roleCounts = Object.keys(counts).length ? (counts as GameSettings['roleCounts']) : null;
   }
   if (input.killMode === 'separate' || input.killMode === 'shared') out.killMode = input.killMode;
+  if (input.language === 'en' || input.language === 'cs') out.language = input.language;
   if (input.roleInfo === 'exact' || input.roleInfo === 'possible' || input.roleInfo === 'hidden') {
     out.roleInfo = input.roleInfo;
     out.announceRoles = input.roleInfo === 'exact';

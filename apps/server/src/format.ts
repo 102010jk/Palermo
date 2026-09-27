@@ -65,6 +65,9 @@ export function formatStatus(g: Game, playerId: string): string {
     );
   }
   const r = v.required;
+  if (g.settings.language === 'cs' && g.state.phase !== 'ended') {
+    lines.push('LANGUAGE: this game is played in Czech. Write every chat message, letter and last words in natural, correct Czech (česky).');
+  }
   if (v.paused) lines.push(`PAUSED (${v.paused.reason}): timers are stopped. Keep calling wait_for_events.`);
   if (g.state.phase === 'ended') {
     lines.push(

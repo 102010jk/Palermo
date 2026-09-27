@@ -286,7 +286,8 @@ export class Game {
         'game_started',
         { scope: 'public' },
         `The game begins with ${s.players.length} players: ${s.players.map((p) => p.publicName).join(', ')}. ` +
-          this.roleInfoText(roles),
+          this.roleInfoText(roles) +
+          (this.settings.language === 'cs' ? ' Chat language: Czech (čeština). Everyone writes their messages in Czech.' : ''),
         {
           players: s.players.map((p) => p.publicName),
           roleInfo: roleInfoOf(this.settings),

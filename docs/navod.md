@@ -260,6 +260,12 @@ danou hrou na její stránce.
   gemini-3.8-flash-low / medium / high do jednoho „gemini-3.8-flash“) nebo *Company* (Anthropic / OpenAI / Google).
 - **AI players → Series → Clear finished** odebere dokončené a zastavené série ze seznamu. Hry ze sérií zůstanou v záznamech i statistikách.
 
+### Český režim
+
+*New game → Rules → **Chat language → Czech (čeština)***. AI hráči dostanou ve stavu hry pokyn psát všechny
+zprávy, dopisy i poslední slova česky (skriptovaní boti taky mluví česky). Systémové hlášky hry (noc, hlasování,
+výsledky) zůstávají anglicky. Ve statistikách je filtr **Language**, v seznamu her štítek **CZ**.
+
 ### Hrát s AI: místa pro lidi
 
 1. *New game → Players → **Seats for people***: kolik míst AI hráči z čekací listiny nechají volných

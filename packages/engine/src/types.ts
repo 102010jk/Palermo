@@ -82,6 +82,8 @@ export interface GameSettings {
    * null = from announceRoles (true -> exact, false -> possible).
    */
   roleInfo: RoleInfo | null;
+  /** Language the players chat in ('cs' = Czech). System messages stay in English. */
+  language: 'en' | 'cs';
   /** Players who die may leave one public message (until the end of the next phase). */
   lastWords: boolean;
   /** Chat limits (null = off). Max characters per message. */

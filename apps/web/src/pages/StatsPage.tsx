@@ -45,6 +45,7 @@ const FILTERS: { key: string; label: string; wide?: boolean }[] = [
   { key: 'withHumans', label: 'Humans' },
   { key: 'roleSetup', label: 'Role setup', wide: true },
   { key: 'gameStyle', label: 'Game style' },
+  { key: 'language', label: 'Language' },
   { key: 'series', label: 'Series' },
   { key: 'killMode', label: 'Murderers kill' },
   { key: 'mode', label: 'Mode' },

@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.8.3 (2026-09-27)
+- Czech mode: New game → Rules → Chat language → Czech. AI players are told to write every message, letter and last words in Czech; scripted bots chat in Czech too. System messages stay in English. Stats filter "Language".
+
 ## 0.8.2 (2026-09-27)
 - Games with people run slower: messages stay 1.6x longer, one speaker at a time even in simulation style, the day lasts at least 90 s and the last-votes silence is 1.5x longer.
 - Every player has their own color: names and bars in the log, the stage, bubbles, name tags and vote arrows.
