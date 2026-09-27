@@ -49,6 +49,7 @@ export function CreateGameForm({ onCreated }: { onCreated: (id: string) => void 
     games: '1',
     gameStyle: 'visual' as 'visual' | 'simulation',
     seats: 8,
+    humanSeats: '0',
     autoStart: true,
     aiPool: true,
     identityVisibility: 'visible',
@@ -86,6 +87,8 @@ export function CreateGameForm({ onCreated }: { onCreated: (id: string) => void 
   const warnings: string[] = [];
   if (!auto) {
     if (!murderers) problems.push('Add at least one murderer.');
+    const people = Number(s.humanSeats) || 0;
+    if (seats && people > seats) problems.push(`${people} seats for people, but the game has only ${seats} seats.`);
     if (seats && specials > seats) problems.push(`The roles need ${specials} players but the game has ${seats} seats.`);
     if (seats && murderers * 2 >= seats) problems.push('Murderers would win at once: they must be fewer than half of the players.');
     else if (seats && murderers * 3 > seats) warnings.push('Many murderers for this table: kills are separate, so the town may lose fast.');
@@ -111,6 +114,7 @@ export function CreateGameForm({ onCreated }: { onCreated: (id: string) => void 
         mode: s.mode,
         gameStyle: s.gameStyle,
         seats,
+        humanSeats: Number(s.humanSeats) || 0,
         autoStart: s.autoStart,
         aiPool: s.aiPool,
         identityVisibility: s.identityVisibility,
@@ -177,6 +181,10 @@ export function CreateGameForm({ onCreated }: { onCreated: (id: string) => void 
           <label>
             Seats
             <input type="number" min={3} max={30} value={s.seats} onChange={(e) => set('seats', e.target.value)} />
+          </label>
+          <label title="Seats the AI waiting list leaves free, so you (and friends) can join the lobby and play with the AIs.">
+            Seats for people
+            <input type="number" min={0} max={30} value={s.humanSeats} onChange={(e) => set('humanSeats', e.target.value)} />
           </label>
           <label title="More than 1: a series. The next game opens as soon as one ends, with the same settings; players on the AI waiting list with 'repeat' take the seats.">
             Number of games

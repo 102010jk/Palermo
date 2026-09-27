@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ROLES, type GameEvent, type NightVisit, type PlayerView, type PublicPlayer } from '@palermo/engine';
-import { api, download, getSocket } from '../api.ts';
+import { api, download, getSocket, session } from '../api.ts';
 import { useApp } from '../App.tsx';
 import { Character, Grave, House, LOOKS, lookFor } from '../components/Sprites.tsx';
 import { Stage, useStage, type StageLine } from '../components/Stage.tsx';
@@ -92,7 +92,7 @@ function fmtTime(ms: number) {
 }
 
 export function GamePage({ gameId }: { gameId: string }) {
-  const { isAdmin, account, navigate } = useApp();
+  const { isAdmin, account, navigate, config, refreshMe } = useApp();
   const [view, setView] = useState<PlayerView | null>(null);
   const [events, setEvents] = useState<GameEvent[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
@@ -536,12 +536,26 @@ export function GamePage({ gameId }: { gameId: string }) {
             </section>
           )}
 
-          {!me && view.phase === 'lobby' && account && (
-            <section className="card">
-              <button className="primary" onClick={() => act('join', {})}>
-                Join this game
-              </button>
-            </section>
+          {!me && view.phase === 'lobby' && (
+            <JoinCard
+              account={!!account}
+              allowGuests={!!config?.allowGuests}
+              peopleSeats={view.settings.humanSeats ?? 0}
+              people={view.players.filter((p) => p.kind === 'human').length}
+              onJoin={async (name) => {
+                try {
+                  setError(null);
+                  if (!account) {
+                    const r = await api<{ token: string }>('POST', '/api/auth/guest', { name });
+                    session.token = r.token;
+                    await refreshMe();
+                  }
+                  await api('POST', `/api/games/${gameId}/join`, {});
+                } catch (e) {
+                  setError((e as Error).message);
+                }
+              }}
+            />
           )}
 
           {me && me.alive && (req.kind === 'vote' || req.kind === 'night_action') && (
@@ -691,6 +705,38 @@ export function GamePage({ gameId }: { gameId: string }) {
         </section>
       )}
     </div>
+  );
+}
+
+/** Join a lobby as a person: with the signed-in account, or a guest name in one step. */
+function JoinCard(props: { account: boolean; allowGuests: boolean; peopleSeats: number; people: number; onJoin: (name: string) => void }) {
+  const [name, setName] = useState('');
+  const kept = Math.max(0, props.peopleSeats - props.people);
+  return (
+    <section className="card join-card">
+      <h3>Play in this game</h3>
+      {kept > 0 && <p className="small">{kept} seat{kept > 1 ? 's are' : ' is'} kept for people: the AI players leave {kept > 1 ? 'them' : 'it'} to you.</p>}
+      {props.account ? (
+        <button className="primary" onClick={() => props.onJoin('')}>
+          Join this game
+        </button>
+      ) : props.allowGuests ? (
+        <form
+          className="row wrap"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (name.trim()) props.onJoin(name.trim());
+          }}
+        >
+          <input placeholder="Your name" value={name} onChange={(e) => setName(e.target.value)} maxLength={32} />
+          <button className="primary" type="submit" disabled={!name.trim()}>
+            Join
+          </button>
+        </form>
+      ) : (
+        <p className="small muted">Sign in on the home page to join.</p>
+      )}
+    </section>
   );
 }
 

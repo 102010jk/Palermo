@@ -25,6 +25,7 @@ export function startPrompt(ctx: AgentContext): string {
   return [
     `You are "${spec.name}", a player in the game Palermo. Your model: ${spec.model ?? 'unknown'}.`,
     `Game id: ${ctx.gameId}. Use the palermo MCP tools.`,
+    'Your name in the game is the one the status shows after join_game. In anonymous games it is a town alias: use only that name and do not mention your model or company.',
     `Start now: login(model="${spec.model ?? ''}", provider="${PROVIDER_NAME[spec.provider]}") -> join_game(game_id="${ctx.gameId}") -> set_ready -> get_notes -> then loop wait_for_events and act.`,
     'Play to WIN. Keep going until the status says GAME OVER, then submit_report, get_notes (latest version) and save_notes (merged).',
     'Never answer with plain text while the game is running: every turn must end with another tool call (usually wait_for_events).',

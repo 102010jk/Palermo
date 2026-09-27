@@ -205,21 +205,32 @@ export class Game {
     const p: Player = {
       ...input,
       name,
-      publicName: name,
+      // Anonymous games: everyone gets a town alias from the moment they sit down (only the game master sees who is who).
+      publicName: this.settings.identityVisibility === 'anonymous' ? this.freeAlias() : name,
       verified: !!input.verified,
       role: null,
       alive: true,
       ready: false,
     };
     this.state.players.push(p);
-    return [this.emit('player_joined', { scope: 'public' }, `${name} joined the game.`, { playerId: p.id }, p.id)];
+    return [this.emit('player_joined', { scope: 'public' }, `${p.publicName} joined the game.`, { playerId: p.id }, p.id)];
+  }
+
+  /** An unused town alias for anonymous games. */
+  private freeAlias(): string {
+    const used = new Set(this.state.players.map((p) => p.publicName.toLowerCase()));
+    const free = TOWN_NAMES.filter((n) => !used.has(n.toLowerCase()));
+    if (free.length) return pick(this.state, free);
+    let i = this.state.players.length + 1;
+    while (used.has(`citizen ${i}`)) i++;
+    return `Citizen ${i}`;
   }
 
   removePlayer(id: string): GameEvent[] {
     if (this.state.phase !== 'lobby') throw new GameError('Players cannot leave after the game started.');
     const p = this.mustPlayer(id);
     this.state.players = this.state.players.filter((x) => x.id !== id);
-    return [this.emit('player_left', { scope: 'public' }, `${p.name} left the game.`, { playerId: id }, id)];
+    return [this.emit('player_left', { scope: 'public' }, `${p.publicName} left the game.`, { playerId: id }, id)];
   }
 
   setReady(id: string, ready = true): GameEvent[] {
@@ -228,7 +239,7 @@ export class Game {
     if (p.ready === ready) return [];
     p.ready = ready;
     return [
-      this.emit('player_ready', { scope: 'public' }, `${p.name} is ${ready ? 'ready' : 'not ready'}.`, { ready }, id),
+      this.emit('player_ready', { scope: 'public' }, `${p.publicName} is ${ready ? 'ready' : 'not ready'}.`, { ready }, id),
     ];
   }
 
@@ -254,8 +265,8 @@ export class Game {
     const roles = shuffle(s, rolesFor(this.settings, s.players.length));
     s.players = shuffle(s, s.players); // random seating order
     if (this.settings.identityVisibility === 'anonymous') {
-      const names = shuffle(s, TOWN_NAMES);
-      s.players.forEach((p, i) => (p.publicName = names[i] ?? `Player ${i + 1}`));
+      // Aliases are given on joining; this only covers lobbies from before that (e.g. restored after an update).
+      for (const p of s.players) if (p.publicName === p.name) p.publicName = this.freeAlias();
     }
     s.players.forEach((p, i) => {
       p.role = roles[i];
@@ -1449,7 +1460,8 @@ export class Game {
 
     const players: PublicPlayer[] = s.players.map((p) => {
       const pub: PublicPlayer = { id: p.id, name: p.publicName, alive: p.alive, ready: p.ready, death: p.death };
-      const showIdentity = isAdmin || ended || !anonymous || p.id === viewerId;
+      // Anonymous games: only the game master (and each player about themselves) knows who is behind a seat, even afterwards.
+      const showIdentity = isAdmin || !anonymous || p.id === viewerId;
       if (showIdentity) {
         pub.kind = p.kind;
         pub.provider = p.provider;

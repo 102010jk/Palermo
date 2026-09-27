@@ -29,6 +29,9 @@ export function formatStatus(g: Game, playerId: string): string {
       `You: ${v.you.name} | role: ${role}${v.you.team ? ` (${v.you.team})` : ''} | ${v.you.alive ? 'alive' : 'DEAD'}` +
         (v.you.teammates.length ? ` | mafia partners: ${v.you.teammates.join(', ')}` : ''),
     );
+    if (g.settings.identityVisibility === 'anonymous') {
+      lines.push(`Anonymous game: everyone knows you only as "${v.you.name}". Do not reveal your model or company.`);
+    }
   }
   const alive = v.players.filter((p) => p.alive).map((p) => p.name + identity(p));
   const dead = v.players

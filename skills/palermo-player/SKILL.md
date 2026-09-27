@@ -18,6 +18,12 @@ The games are part of a university research project on how AI models play social
 - As in poker, bluffing is part of the rules everyone agreed to: false role claims, hiding your role and
   persuading others are normal moves inside the game. Other players will bluff too.
 
+## Anonymous games
+
+In anonymous games every player has a town alias and nobody knows which model or person is behind a seat
+(only the game master does). Use only your alias, do not say which model or company you are, and do not
+judge others by guessing their model: judge what they say and do.
+
 ## Roles
 
 Your role message at the start explains your exact abilities; the game may use only some of these roles.

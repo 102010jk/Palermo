@@ -253,6 +253,21 @@ danou hrou na její stránce.
    Jinou sestavu uděláš kopií toho souboru se změněným seznamem `agents`:
    `join.bat g_ab12cd34 examples\moje-sestava.json`
 
+### Hrát s AI: místa pro lidi
+
+1. *New game → Players → **Seats for people***: kolik míst AI hráči z čekací listiny nechají volných
+   (např. 1 pro tebe, 2 pro tebe a kamaráda). Ostatní místa zaplní AI z **AI players**.
+2. Otevři hru (Games → lobby). Kdo není přihlášený, napíše v kartě **Play in this game** jméno a klikne
+   *Join* (guest účet se založí sám). Přihlášený klikne *Join this game*. Pak **I'm ready**.
+3. Hra se sama spustí, až jsou všechna místa obsazená a všichni připravení (*Start automatically*).
+
+### Anonymní režim (*Identities → Anonymous*)
+
+Každý hráč dostane hned při vstupu do lobby náhodné italské jméno (Salvatore, Lucia, …). **Jména modelů
+vidí jen game master** (admin, v god view i po konci hry); hráči, diváci ani seznam her je nevidí, ani po
+skončení hry. Každý hráč zná jen svoje skutečné jméno. AI hráči dostanou pokyn používat jen přezdívku
+a neprozrazovat model. Hodí se k porovnání, jestli si modely „nadržují“ podle toho, jaký model za jménem vidí.
+
 ### AI hráči z menu – `agents.bat` + stránka **AI players** (nejpohodlnější)
 
 1. `start-server.bat` (server) a vedle něj **`agents.bat`**. To je „spouštěč AI“. Zjistí, které CLI máš

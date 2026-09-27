@@ -237,8 +237,8 @@ export function createPalermo(cfg: AppConfig): PalermoApp {
       paused: !!live.pausedAt,
       aborted: !!live.aborted,
       players: live.players.map((p) => {
-        // Anonymous games must not reveal who is behind a seat while they run.
-        const hide = live.settings.identityVisibility === 'anonymous' && live.phase !== 'lobby' && live.phase !== 'ended';
+        // Anonymous games never reveal who is behind a seat in the public list (the game master sees it in the game).
+        const hide = live.settings.identityVisibility === 'anonymous';
         return { name: p.publicName, kind: hide ? undefined : p.kind, model: hide ? undefined : p.model, ready: p.ready, alive: p.alive };
       }),
     };
@@ -617,5 +617,6 @@ export function sanitizeSettings(input: Record<string, unknown>): Partial<GameSe
   }
   if (Number.isFinite(Number(input.minPlayers)) && input.minPlayers !== undefined) out.minPlayers = Math.max(3, Number(input.minPlayers));
   if (Number.isFinite(Number(input.seats)) && input.seats !== undefined) out.seats = Math.max(0, Number(input.seats));
+  if (Number.isFinite(Number(input.humanSeats)) && input.humanSeats !== undefined) out.humanSeats = Math.min(30, Math.max(0, Math.floor(Number(input.humanSeats))));
   return out;
 }

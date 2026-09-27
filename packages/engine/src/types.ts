@@ -97,6 +97,8 @@ export interface GameSettings {
   voteDeadlineSec: number | null;
   /** Server starts the game automatically once enough players joined and everyone is ready. */
   autoStart: boolean;
+  /** Seats kept for people: the AI waiting list does not fill them (only with a seat count). */
+  humanSeats: number;
   /** Target seat count used together with autoStart (0 = any count >= minPlayers). */
   seats: number;
   /** AI players from the waiting list (AI players page + agents.bat) may take free seats. */

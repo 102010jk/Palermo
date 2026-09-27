@@ -44,9 +44,8 @@ describe('lobby', () => {
     expect(other.model).toBeUndefined();
     expect(['Opus', 'Haiku', 'Flash']).not.toContain(other.name);
     expect(g.view(null).players.every((p) => p.model)).toBe(true);
-    // The lobby log (with real names) is hidden from players once the game runs.
-    expect(g.eventsFor('p0').some((e) => e.text.includes('Haiku joined'))).toBe(false);
-    expect(g.eventsFor(null).some((e) => e.text.includes('Haiku joined'))).toBe(true);
+    // Join messages only ever carry the alias.
+    expect(g.eventsFor(null).some((e) => e.text.includes('Haiku joined'))).toBe(false);
   });
 });
 
@@ -56,6 +55,27 @@ describe('start', () => {
     const start = g.eventsFor('p0').find((e) => e.type === 'game_started')!;
     expect(start.text).toContain('secret');
     expect(start.data.roles).toBeUndefined();
+  });
+});
+
+describe('anonymous games', () => {
+  it('give town aliases on joining and hide models from other players even after the end', () => {
+    let t = 1000;
+    const g = new Game('g1', { roles: ['murderer', 'doctor', 'civilian', 'civilian'], identityVisibility: 'anonymous', nightTimeoutSec: null }, { seed: 5, now: () => t });
+    ['GPT', 'Claude', 'Gemini', 'Jakub'].forEach((n, i) => g.addPlayer({ id: `p${i}`, name: n, kind: 'ai', model: `m-${n}` }));
+    const aliases = g.state.players.map((p) => p.publicName);
+    expect(new Set(aliases).size).toBe(4);
+    expect(aliases).not.toContain('GPT');
+    expect(g.eventsFor('p1').find((e) => e.type === 'player_joined')!.text).not.toContain('GPT');
+    g.state.players.forEach((p) => g.setReady(p.id));
+    g.start();
+    expect(g.state.players.map((p) => p.publicName).sort()).toEqual([...aliases].sort()); // kept from the lobby
+    g.state.phase = 'ended';
+    const other = g.view('p1').players.find((p) => p.id === 'p0')!;
+    expect(other.model).toBeUndefined();
+    expect(other.realName).toBeUndefined();
+    expect(g.view('p0').players.find((p) => p.id === 'p0')!.model).toBe('m-GPT');
+    expect(g.view(null).players.find((p) => p.id === 'p0')!.realName).toBe('GPT');
   });
 });
 

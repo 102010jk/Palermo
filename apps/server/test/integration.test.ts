@@ -157,6 +157,35 @@ describe('server', () => {
     await api('POST', `/api/games/${open}/abort`, {});
   });
 
+  it('leaves the seats kept for people to people', async () => {
+    for (const g of (await api('GET', '/api/games')).body) if (g.phase === 'lobby') await api('POST', `/api/games/${g.id}/abort`, {});
+    for (const p of (await api('GET', '/api/admin/pool')).body.picks) await api('DELETE', `/api/admin/pool/picks/${p.id}`);
+    const game = (await api('POST', '/api/games', { settings: { mode: 'people-t', seats: 4, humanSeats: 2 } })).body.id;
+    await api('POST', '/api/admin/pool/picks', { provider: 'bot', model: 'script', label: 'Bot', count: 4, repeat: false });
+    const hello = await api('POST', '/api/admin/pool/hello', { host: 'test', catalog: [{ provider: 'bot', model: 'script', label: 'Bot' }] });
+    const mine = hello.body.assignments.filter((a: { gameId: string }) => a.gameId === game);
+    expect(mine).toHaveLength(2);
+    // A person takes one of the kept seats: still no room for more AIs.
+    const guest = (await api('POST', '/api/auth/guest', { name: 'Jakub' })).body.token;
+    expect((await api('POST', `/api/games/${game}/join`, {}, guest)).status).toBe(200);
+    const again = await api('POST', '/api/admin/pool/hello', { host: 'test', running: mine.map((a: { pickId: string }) => a.pickId) });
+    expect(again.body.assignments.filter((a: { gameId: string }) => a.gameId === game)).toEqual([]);
+    await api('POST', `/api/games/${game}/abort`, {});
+    for (const p of (await api('GET', '/api/admin/pool')).body.picks) await api('DELETE', `/api/admin/pool/picks/${p.id}`);
+  });
+
+  it('anonymous games show only aliases to everyone but the game master, also after the end', async () => {
+    const g = app.manager.create({ mode: 'anon-t', identityVisibility: 'anonymous', aiPool: false });
+    const ids = ['GPT-X', 'Claude-Y', 'Gemini-Z', 'Human-W'].map((n) => app.manager.join(g.state.id, { name: n, kind: 'ai', model: `model-${n}` }));
+    const list = (await api('GET', '/api/games')).body.find((x: any) => x.id === g.state.id);
+    expect(list.players.every((p: any) => !p.model && !['GPT-X', 'Claude-Y', 'Gemini-Z', 'Human-W'].includes(p.name))).toBe(true);
+    const spectator = await fetch(`${base}/api/games/${g.state.id}`).then((r) => r.json());
+    expect(JSON.stringify(spectator)).not.toMatch(/GPT-X|Claude-Y|model-/);
+    const admin = (await api('GET', `/api/games/${g.state.id}`)).body;
+    expect(admin.view.players.find((p: any) => p.id === ids[0]).realName).toBe('GPT-X');
+    app.manager.apply(g.state.id, (x) => x.abort());
+  });
+
   it('puts an AI player back on the waiting list and cancels its CLI when the game starts without it', async () => {
     for (const g of (await api('GET', '/api/games')).body) if (g.phase === 'lobby') await api('POST', `/api/games/${g.id}/abort`, {});
     const game = (await api('POST', '/api/games', { settings: { mode: 'pool-late', seats: 3 } })).body.id;

@@ -227,6 +227,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   chatCooldownSec: null,
   voteDeadlineSec: 90,
   autoStart: false,
+  humanSeats: 0,
   seats: 0,
   aiPool: true,
   series: null,

@@ -262,12 +262,14 @@ export class AgentPool {
       .sort((a, b) => a.state.createdAt - b.state.createdAt);
   }
 
-  /** Seats still free in a lobby, counting agents that are on their way. 0 seats = no limit. */
+  /** Seats still free for AI players in a lobby, counting agents on their way and seats kept for people. 0 seats = no limit. */
   private freeSeats(g: Game): number {
     if (!g.settings.seats) return Infinity;
     const seated = new Set(g.state.players.map((p) => p.accountId));
     const coming = this.picks.filter((p) => p.gameId === g.state.id && p.status === 'joining' && !seated.has(p.accountId)).length;
-    return g.settings.seats - g.state.players.length - coming;
+    const people = g.state.players.filter((p) => p.kind === 'human').length;
+    const keptForPeople = Math.max(0, (g.settings.humanSeats ?? 0) - people);
+    return g.settings.seats - g.state.players.length - coming - keptForPeople;
   }
 
   private lobbyInfo(g: Game) {
