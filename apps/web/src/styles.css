@@ -1650,6 +1650,18 @@ button:focus-visible {
   background: var(--good);
 }
 
+/* Every player has a color: a bar in front of their lines in the log. */
+.ev.chat,
+.ev.team,
+.ev.thought,
+.ev.vote {
+  border-left: 3px solid transparent;
+  padding-left: 8px;
+}
+.ev.thought {
+  border-left-style: dotted;
+}
+
 /* Ventriloquist: forged lines are marked only in the god view. */
 .ev.chat.forged {
   border-left: 3px dashed #e0609e;

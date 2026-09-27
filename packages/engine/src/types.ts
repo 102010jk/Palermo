@@ -287,6 +287,8 @@ export interface PlayerView {
   winner: Winner | null;
   isAdmin: boolean;
   paused: { since: number; reason: string } | null;
+  /** People play: messages are paced slower (the web stage reads this too). */
+  slowPace: boolean;
   /** Visual games: names of the players whose messages wait for the floor, in order. */
   speechQueue: string[];
   you: {

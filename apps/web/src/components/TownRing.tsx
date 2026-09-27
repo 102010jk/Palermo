@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import { ROLES, type PublicPlayer } from '@palermo/engine';
 import { Character, Cottage, Fountain, Grave, Lamp, LOOKS, lookFor } from './Sprites.tsx';
+import { colorOf } from '../colors.ts';
 
 export type BubbleKind = 'chat' | 'team' | 'thought';
 export interface Bubble {
@@ -125,7 +126,7 @@ export function TownRing(props: Props) {
           >
             <Cottage variant={i} night={night} dead={!alive} scale={scale} roof={ROOFS[i % ROOFS.length]} />
             {props.traps.has(p.id) && <span className="trap-mark" title="Trap">🪤</span>}
-            <span className="nametag" style={{ borderColor: LOOKS[look].color }}>
+            <span className="nametag" style={{ borderColor: colorOf(players, p.id) ?? LOOKS[look].color }}>
               {p.name}
               {p.id === props.meId ? ' (you)' : ''}
             </span>
@@ -157,7 +158,7 @@ export function TownRing(props: Props) {
                 y1={a.from.y}
                 x2={a.from.x + dx * k}
                 y2={a.from.y + dy * k}
-                stroke={LOOKS[lookFor(players[index.get(a.v)!])].color}
+                stroke={colorOf(players, a.v) ?? LOOKS[lookFor(players[index.get(a.v)!])].color}
                 strokeWidth={2.5}
                 strokeDasharray="6 4"
                 markerEnd="url(#arrow)"
@@ -199,7 +200,10 @@ export function TownRing(props: Props) {
               </span>
             )}
             {bubble && !hidden && bubble.kind !== 'thought' && (
-              <span className={`bubble ${bubble.kind} ${bubble.forgedBy && props.godView ? 'forged' : ''}`}>
+              <span
+                className={`bubble ${bubble.kind} ${bubble.forgedBy && props.godView ? 'forged' : ''}`}
+                style={{ borderColor: colorOf(players, p.id), boxShadow: `3px 3px 0 ${colorOf(players, p.id) ?? 'rgba(0,0,0,0.35)'}` }}
+              >
                 {bubble.text.length > 90 ? `${bubble.text.slice(0, 90)}…` : bubble.text}
                 {bubble.forgedBy && props.godView && <span className="forged-by">🗣 really {nameOf(bubble.forgedBy)}</span>}
               </span>
@@ -218,7 +222,11 @@ export function TownRing(props: Props) {
               )}
             </span>
             {night && alive && !walking && !props.godView && <span className="zzz">z</span>}
-            {(onSquare || walking) && alive && <span className="person-name">{p.name}</span>}
+            {(onSquare || walking) && alive && (
+              <span className="person-name" style={{ background: colorOf(players, p.id), color: '#14111c' }}>
+                {p.name}
+              </span>
+            )}
           </button>
         );
       })}

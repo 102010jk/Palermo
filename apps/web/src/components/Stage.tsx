@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { readingTimeMs, type GameEvent, type PublicPlayer } from '@palermo/engine';
 import { Character, LOOKS, lookFor } from './Sprites.tsx';
+import { colorOf } from '../colors.ts';
 
 /** One line on the stage: a chat message (or mafia night chat) shown on its own, long enough to read. */
 export interface StageLine {
@@ -21,7 +22,8 @@ export interface StageState {
   /** The current line is still within its reading time. */
   speaking: boolean;
   queued: StageLine[];
-  push: (events: GameEvent[]) => void;
+  /** `slow`: people play, so lines stay up longer (same pace as the server). */
+  push: (events: GameEvent[], slow?: boolean) => void;
   /** Clear the stage; lines up to `seenSeq` are history and will not be played. */
   reset: (seenSeq?: number) => void;
 }
@@ -58,7 +60,7 @@ export function useStage(): StageState {
   }, []);
 
   const push = useCallback(
-    (events: GameEvent[]) => {
+    (events: GameEvent[], slow = false) => {
       const lines: StageLine[] = [];
       const forged = new Map(events.filter((e) => e.data.kind === 'forged').map((e) => [Number(e.data.chatSeq), String(e.data.by)]));
       for (const e of events) {
@@ -82,7 +84,7 @@ export function useStage(): StageState {
           forgedBy,
           thought: t && e.at - t.at < 5 * 60_000 ? t.text : undefined,
           thinker,
-          ms: readingTimeMs(text),
+          ms: readingTimeMs(text, slow),
         });
       }
       if (!lines.length) return;
@@ -144,13 +146,17 @@ export function Stage({ line, speaking, queued, waiting = [], players, godView, 
   }
   const speaker = who(line.actor);
   const look = speaker ? lookFor(speaker) : 'unknown';
-  const color = LOOKS[look]?.color;
+  const color = colorOf(players, line.actor) ?? LOOKS[look]?.color;
   const progress = still || !speaking ? 1 : Math.min(1, (Date.now() - line.start) / line.ms);
   const real = line.forgedBy ? who(line.forgedBy) : undefined;
   const thinker = who(line.thinker);
   const next = [...queued.map((q) => who(q.actor)?.name ?? '?'), ...waiting];
   return (
-    <div className={`stage ${line.kind} ${line.forgedBy && godView ? 'forged' : ''} ${speaking || still ? '' : 'done'}`} key={line.seq}>
+    <div
+      className={`stage ${line.kind} ${line.forgedBy && godView ? 'forged' : ''} ${speaking || still ? '' : 'done'}`}
+      key={line.seq}
+      style={color ? { borderLeftColor: color, borderLeftWidth: 10 } : undefined}
+    >
       <div className="stage-avatar">{speaker && <Character look={look} scale={3} className="talk" />}</div>
       <div className="stage-body">
         <div className="stage-who">

@@ -1,7 +1,7 @@
 {
   "name": "palermo",
   "private": true,
-  "version": "0.8.1",
+  "version": "0.8.2",
   "description": "Palermo (Mafia) social deduction game where AI models and humans play together.",
   "type": "module",
   "workspaces": [

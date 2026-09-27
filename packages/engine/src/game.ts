@@ -51,9 +51,15 @@ export const VISUAL_MIN_NIGHT_SEC = 12;
 /** Visual games: how long one night visit takes to play out in the god view (walk there, act, walk back). */
 export const VISUAL_VISIT_MS = 5000;
 
-/** How long a chat message stays on screen before the next one (visual games). */
-export function readingTimeMs(text: string): number {
-  return Math.min(12_000, 2_500 + 45 * text.length);
+/** Games with people at the table run this much slower (reading time, vote silence). */
+export const HUMAN_PACE = 1.6;
+/** Games with people: a day lasts at least this long. */
+export const HUMAN_MIN_DAY_SEC = 90;
+
+/** How long a chat message stays on screen before the next one (visual games and games with people). */
+export function readingTimeMs(text: string, slow = false): number {
+  const ms = Math.min(12_000, 2_500 + 45 * text.length);
+  return slow ? Math.min(18_000, Math.round(ms * HUMAN_PACE)) : ms;
 }
 
 export interface GameOptions {
@@ -366,10 +372,26 @@ export class Game {
     return this.settings.gameStyle === 'visual';
   }
 
+  /** A person plays (humans read and type slower than models). */
+  hasPeople(): boolean {
+    return this.state.players.some((p) => p.kind === 'human');
+  }
+
+  /** One speaker at a time and a minimum day length: visual games, and any game with people at the table. */
+  paced(): boolean {
+    return this.visual() || this.hasPeople();
+  }
+
+  /** Seconds of chat silence before the last votes are counted (longer with people). */
+  private voteSilenceSec(): number | null {
+    const sec = this.settings.voteDeadlineSec;
+    return sec ? Math.round(sec * (this.hasPeople() ? 1.5 : 1)) : null;
+  }
+
   /** A chat message in `p`'s name. With `forgedBy` it was really written by the ventriloquist (only the god view knows). */
   private speak(p: Player, text: string, forgedBy?: string): GameEvent[] {
     const s = this.state;
-    if (this.visual()) s.floorUntil = this.now() + readingTimeMs(text);
+    if (this.paced()) s.floorUntil = this.now() + readingTimeMs(text, this.hasPeople());
     const ev = this.emit('chat', { scope: 'public' }, `${p.publicName}: ${text}`, { message: text }, p.id);
     this.extendVoteDeadline();
     if (!forgedBy) return [ev];
@@ -542,7 +564,7 @@ export class Game {
     this.checkChatLimits(p, text);
     const out = this.emitThought(p, thought, 'chat');
     if (s.phase === 'day') {
-      if (this.visual()) {
+      if (this.paced()) {
         // One voice at a time, so people can read along: the rest waits in a queue.
         s.speechQueue ??= [];
         if ((s.floorUntil ?? 0) <= this.now() && !s.speechQueue.length) out.push(...this.speak(p, text));
@@ -1082,7 +1104,7 @@ export class Game {
     if (max && text.length > max) throw new GameError(`Message too long: ${text.length} characters, the limit is ${max}.`);
     s.lastWordsSaid = [...(s.lastWordsSaid ?? []), p.id];
     const out = this.emitThought(p, thought, 'last words');
-    if (this.visual() && s.phase === 'day') s.floorUntil = Math.max(s.floorUntil ?? 0, this.now()) + readingTimeMs(text);
+    if (this.paced() && s.phase === 'day') s.floorUntil = Math.max(s.floorUntil ?? 0, this.now()) + readingTimeMs(text, this.hasPeople());
     out.push(this.emit('last_words', { scope: 'public' }, `${p.publicName}'s last words: "${text}"`, { message: text }, p.id));
     return out;
   }
@@ -1110,7 +1132,7 @@ export class Game {
     if (this.knowsPartners(p)) {
       out.push(this.emit('team_chat', { scope: 'team', team: 'mafia' }, `[mafia] ${p.publicName} throws their voice as ${t.publicName}: "${text}"`, { message: `(as ${t.publicName}) ${text}`, forged: true }, p.id));
     }
-    if (this.visual()) {
+    if (this.paced()) {
       s.speechQueue ??= [];
       if ((s.floorUntil ?? 0) <= this.now() && !s.speechQueue.length) out.push(...this.speak(t, text, p.id));
       else {
@@ -1211,9 +1233,9 @@ export class Game {
   /** Everyone alive has voted: the day ends now, or in visual games once it lasted long enough to follow. */
   private everyoneVoted(): GameEvent[] {
     const s = this.state;
-    if (!this.visual()) return this.resolveDay();
+    if (!this.paced()) return this.resolveDay();
     if (s.dayClosing) return [];
-    const minEnd = (s.phaseStartedAt ?? this.now()) + VISUAL_MIN_DAY_SEC * 1000;
+    const minEnd = (s.phaseStartedAt ?? this.now()) + (this.hasPeople() ? HUMAN_MIN_DAY_SEC : VISUAL_MIN_DAY_SEC) * 1000;
     const end = Math.max(this.now() + 5_000, minEnd);
     s.dayClosing = true;
     s.phaseEndsAt = s.phaseEndsAt ? Math.min(s.phaseEndsAt, end) : end;
@@ -1224,7 +1246,7 @@ export class Game {
   /** Stall guard: two thirds have voted, the rest have until the chat has been quiet for settings.voteDeadlineSec. */
   private maybeStartVoteDeadline(voted: number, alive: number): GameEvent[] {
     const s = this.state;
-    const sec = this.settings.voteDeadlineSec;
+    const sec = this.voteSilenceSec();
     if (!sec || s.voteDeadlineStartedAt || voted * 3 < alive * 2) return [];
     s.voteDeadlineStartedAt = this.now();
     this.extendVoteDeadline();
@@ -1245,7 +1267,7 @@ export class Game {
   /** Moves the vote deadline to `voteDeadlineSec` after now, within the cap and the day's own time limit. */
   private extendVoteDeadline(): void {
     const s = this.state;
-    const sec = this.settings.voteDeadlineSec;
+    const sec = this.voteSilenceSec();
     if (!sec || !s.voteDeadlineStartedAt || s.phase !== 'day' || s.dayClosing) return;
     const cap = s.voteDeadlineStartedAt + Math.max(sec, VOTE_DEADLINE_CAP_SEC) * 1000;
     const dayEnd = this.settings.dayTimeoutSec && s.phaseStartedAt ? s.phaseStartedAt + this.settings.dayTimeoutSec * 1000 : Infinity;
@@ -1498,6 +1520,7 @@ export class Game {
       winner: s.winner,
       isAdmin,
       paused: s.pausedAt ? { since: s.pausedAt, reason: s.pauseReason ?? '' } : null,
+      slowPace: this.hasPeople(),
       speechQueue: (s.speechQueue ?? []).map((q) => this.player(q.playerId)?.publicName ?? '?'),
       you: me
         ? {

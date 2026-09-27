@@ -54,3 +54,27 @@ describe('visual games', () => {
     expect(g.state.phase).toBe('ended');
   });
 });
+
+describe('games with people', () => {
+  it('pace the chat and the day even in simulation style, slower than visual AI games', () => {
+    let t = 1000;
+    const g = new Game('h', { roles: ['murderer', 'doctor', 'civilian', 'civilian'], gameStyle: 'simulation', startPhase: 'day', voteDeadlineSec: 90, nightTimeoutSec: null }, { seed: 3, now: () => t });
+    ['Jakub', 'A', 'B', 'C'].forEach((n, i) => g.addPlayer({ id: `p${i}`, name: n, kind: i === 0 ? 'human' : 'ai' }));
+    g.state.players.forEach((p) => g.setReady(p.id));
+    g.start();
+    expect(g.hasPeople()).toBe(true);
+    expect(g.view('p0').slowPace).toBe(true);
+    g.say('p1', 'Hello town.');
+    const second = g.say('p2', 'Hi.');
+    expect(second.some((e) => e.data.kind === 'speech_queued')).toBe(true);
+    expect(readingTimeMs('x'.repeat(100), true)).toBeGreaterThan(readingTimeMs('x'.repeat(100)));
+    for (const p of g.alive()) g.vote(p.id, 'skip');
+    expect(g.state.phase).toBe('day'); // people get at least 90 s of day
+    t += 60_000;
+    g.tick();
+    expect(g.state.phase).toBe('day');
+    t += 40_000;
+    g.tick();
+    expect(g.state.phase).not.toBe('day');
+  });
+});

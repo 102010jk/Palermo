@@ -4,6 +4,7 @@ import { api, download, getSocket, session } from '../api.ts';
 import { useApp } from '../App.tsx';
 import { Character, Grave, House, LOOKS, lookFor } from '../components/Sprites.tsx';
 import { Stage, useStage, type StageLine } from '../components/Stage.tsx';
+import { colorOf } from '../colors.ts';
 import { TownRing, type Bubble, type NightStep } from '../components/TownRing.tsx';
 
 interface Report {
@@ -130,7 +131,7 @@ export function GamePage({ gameId }: { gameId: string }) {
         const seen = new Set(prev.map((e) => e.seq));
         return [...prev, ...p.events.filter((e) => !seen.has(e.seq))];
       });
-      stage.push(p.events);
+      stage.push(p.events, p.view.slowPace);
       const now = Date.now();
       setBubbles((b) => {
         const next = { ...b };
@@ -414,7 +415,7 @@ export function GamePage({ gameId }: { gameId: string }) {
                 {votes > 0 && <span className="vote-badge">{votes}</span>}
                 <House night={night} roof={ROOFS[i % ROOFS.length]} scale={4} />
                 <span className="figure">{alive ? <Character look={look} scale={4} className={bubble ? 'talk' : 'bob'} style={{ animationDelay: `${(i % 5) * 0.2}s` }} /> : <Grave scale={4} />}</span>
-                <span className="nametag" style={{ borderColor: LOOKS[look].color }}>
+                <span className="nametag" style={{ borderColor: colorOf(view.players, p.id) ?? LOOKS[look].color }}>
                   {p.name}
                 </span>
                 <span className="modeltag">
@@ -905,12 +906,12 @@ function VoiceCard({ options, onSend }: { options: string[]; onSend: (as: string
 
 function EventLine({ e, players, admin, forgedBy }: { e: GameEvent; players: PublicPlayer[]; admin: boolean; forgedBy?: string }) {
   const actor = e.actor ? players.find((p) => p.id === e.actor) : undefined;
-  const color = actor ? LOOKS[lookFor(actor)].color : undefined;
+  const color = colorOf(players, e.actor) ?? (actor ? LOOKS[lookFor(actor)].color : undefined);
   switch (e.type) {
     case 'chat': {
       const real = forgedBy ? players.find((p) => p.id === forgedBy) : undefined;
       return (
-        <div className={`ev chat ${forgedBy ? 'forged' : ''}`}>
+        <div className={`ev chat ${forgedBy ? 'forged' : ''}`} style={forgedBy ? undefined : { borderLeftColor: color }}>
           <b style={{ color }}>{actor?.name ?? '?'}</b> {String(e.data.message ?? '')}
           {forgedBy && <span className="pill forged-pill" title="Ventriloquist: this line was not written by the player it shows">🗣 forged by {real?.name ?? '?'}</span>}
         </div>
@@ -918,7 +919,7 @@ function EventLine({ e, players, admin, forgedBy }: { e: GameEvent; players: Pub
     }
     case 'team_chat':
       return (
-        <div className="ev team">
+        <div className="ev team" style={{ borderLeftColor: color }}>
           <span className="pill">mafia</span> <b style={{ color }}>{actor?.name}</b> {String(e.data.message ?? '')}
         </div>
       );
@@ -941,13 +942,13 @@ function EventLine({ e, players, admin, forgedBy }: { e: GameEvent; players: Pub
       );
     case 'last_words':
       return (
-        <div className="ev chat last-words">
+        <div className="ev chat last-words" style={{ borderLeftColor: color }}>
           <span className="pill">last words</span> <b style={{ color }}>{actor?.name}</b> {String(e.data.message ?? '')}
         </div>
       );
     case 'thought':
       return (
-        <div className="ev thought">
+        <div className="ev thought" style={{ borderLeftColor: color }}>
           <span className="pill">thinks</span> <b style={{ color }}>{actor?.name}</b> <i>{String(e.data.thought ?? '')}</i>
         </div>
       );
@@ -982,9 +983,15 @@ function EventLine({ e, players, admin, forgedBy }: { e: GameEvent; players: Pub
     case 'night_action':
       return <div className="ev secret">{e.text}</div>;
     case 'vote':
-      return <div className="ev vote">{e.text}</div>;
+      return (
+        <div className="ev vote" style={{ borderLeftColor: color }}>
+          {e.text}
+        </div>
+      );
     case 'notice':
       if (e.vis.scope === 'admin') return null;
+      // "Your message is in line" is for the speaker; in the god view it is only noise.
+      if (admin && e.data.kind === 'speech_queued') return null;
       return <div className="ev notice">{e.text}</div>;
     default:
       return <div className="ev notice">{e.text}</div>;

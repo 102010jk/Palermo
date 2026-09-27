@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.2 (2026-09-27)
+- Games with people run slower: messages stay 1.6x longer, one speaker at a time even in simulation style, the day lasts at least 90 s and the last-votes silence is 1.5x longer.
+- Every player has their own color: names and bars in the log, the stage, bubbles, name tags and vote arrows.
+- God view log without the "your message is in line" notices.
+
 ## 0.8.1 (2026-09-27)
 - God view of anonymous games: the log and the stage show the real names (the line-up) instead of the town aliases; with god view off you see the aliases like the players.
 
