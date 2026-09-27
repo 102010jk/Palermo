@@ -118,13 +118,15 @@ interface Props {
   /** Names still waiting on the server for the floor (after the queued lines). */
   waiting?: string[];
   players: PublicPlayer[];
+  /** God view of anonymous games: turns aliases in the text into real names. */
+  rename?: (text: string) => string;
   godView: boolean;
   /** Replays show the latest line without a timer. */
   still?: boolean;
 }
 
 /** The subtitle panel under the town: who is speaking now, the whole message, and who is next in line. */
-export function Stage({ line, speaking, queued, waiting = [], players, godView, still }: Props) {
+export function Stage({ line, speaking, queued, waiting = [], players, godView, still, rename = (t) => t }: Props) {
   const [, force] = useState(0);
   useEffect(() => {
     if (!line || still || !speaking) return;
@@ -158,11 +160,11 @@ export function Stage({ line, speaking, queued, waiting = [], players, godView, 
           {line.kind === 'testament' && <span className="pill">🕊 sealed letter, opened after death</span>}
           {line.forgedBy && godView && <span className="pill forged-pill">🗣 forged by {real?.name ?? '?'}</span>}
         </div>
-        <p className="stage-text">{line.text}</p>
+        <p className="stage-text">{rename(line.text)}</p>
         {godView && line.thought && (
           <p className="stage-thought">
             💭 {line.forgedBy ? `${thinker?.name ?? '?'} thought: ` : ''}
-            <i>{line.thought}</i>
+            <i>{rename(line.thought)}</i>
           </p>
         )}
         <div className="stage-foot">

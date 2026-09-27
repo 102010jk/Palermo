@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.8.1 (2026-09-27)
+- God view of anonymous games: the log and the stage show the real names (the line-up) instead of the town aliases; with god view off you see the aliases like the players.
+
 ## 0.8.0 (2026-09-27)
 - Version number and this changelog in the web app (header link).
 - AI players page: clear finished series from the list.

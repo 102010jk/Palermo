@@ -290,6 +290,22 @@ export function GamePage({ gameId }: { gameId: string }) {
   // Ventriloquist lines: chat seq -> real author (admin notices, god view only).
   const forged = new Map<number, string>();
   for (const e of events) if (e.data.kind === 'forged') forged.set(Number(e.data.chatSeq), String(e.data.by));
+  // God view of an anonymous game: the log and the stage use the real names (the line-up) instead of the town aliases.
+  const realOf = new Map<string, string>();
+  if (admin && view.settings.identityVisibility === 'anonymous') {
+    for (const p of view.players) if (p.realName && p.realName !== p.name) realOf.set(p.name, p.realName);
+  }
+  const aliasRe = realOf.size
+    ? new RegExp(`(?<![\\p{L}\\p{N}])(${[...realOf.keys()].sort((a, b) => b.length - a.length).map(escapeRe).join('|')})(?![\\p{L}\\p{N}])`, 'gu')
+    : null;
+  const unmask = (t: string) => (aliasRe ? t.replace(aliasRe, (m) => realOf.get(m) ?? m) : t);
+  const logPlayers = aliasRe ? view.players.map((p) => ({ ...p, name: realOf.get(p.name) ?? p.name })) : view.players;
+  const unmaskEvent = (e: GameEvent): GameEvent => {
+    if (!aliasRe) return e;
+    const data = { ...e.data };
+    for (const k of ['message', 'thought'] as const) if (typeof data[k] === 'string') data[k] = unmask(data[k] as string);
+    return { ...e, text: unmask(e.text), data };
+  };
   const act = async (path: string, body: unknown) => {
     try {
       setError(null);
@@ -419,8 +435,9 @@ export function GamePage({ gameId }: { gameId: string }) {
             speaking={!replay && stage.speaking}
             still={!!replay}
             queued={replay ? [] : stage.queued}
-            waiting={replay ? [] : view.speechQueue ?? []}
-            players={view.players}
+            waiting={replay ? [] : (view.speechQueue ?? []).map(unmask)}
+            players={logPlayers}
+            rename={unmask}
             godView={admin}
           />
         )}
@@ -437,7 +454,7 @@ export function GamePage({ gameId }: { gameId: string }) {
             }}
           >
             {shownEvents.map((e) => (
-              <EventLine key={e.seq} e={e} players={view.players} admin={view.isAdmin} forgedBy={admin ? forged.get(e.seq) : undefined} />
+              <EventLine key={e.seq} e={unmaskEvent(e)} players={logPlayers} admin={view.isAdmin} forgedBy={admin ? forged.get(e.seq) : undefined} />
             ))}
           </div>
           {view.phase === 'ended' && events.length > 0 && (
@@ -1006,4 +1023,8 @@ function UsageTable({ usage }: { usage: any[] }) {
       </tbody>
     </table>
   );
+}
+
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
